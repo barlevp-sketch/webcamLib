@@ -6,21 +6,20 @@
   <title>סורק ספרים</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: Arial, sans-serif; background: #0f172a; color: #fff;
-      height: 100dvh; display: flex; flex-direction: column;
-      align-items: center; justify-content: center; gap: 20px; padding: 20px; }
-    h2 { font-size: 20px; font-weight: 800; text-align: center; }
-    .sub { font-size: 13px; color: rgba(255,255,255,0.55); text-align: center; }
-    .video-wrap { position: relative; width: min(320px,90vw); height: min(320px,90vw);
-      border-radius: 18px; overflow: hidden; border: 3px solid #3b5bdb;
-      box-shadow: 0 0 40px rgba(59,91,219,0.5); }
-    video { width: 100%; height: 100%; object-fit: cover; display: block; }
-    .scan-line { position: absolute; left: 8%; right: 8%; height: 2px;
-      background: #3b5bdb; box-shadow: 0 0 10px rgba(59,91,219,0.9);
-      animation: s 2s ease-in-out infinite; }
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body { font-family:Arial,sans-serif; background:#0f172a; color:#fff;
+      height:100dvh; display:flex; flex-direction:column;
+      align-items:center; justify-content:center; gap:20px; padding:20px; }
+    h2 { font-size:20px; font-weight:800; text-align:center; }
+    .sub { font-size:13px; color:rgba(255,255,255,0.55); text-align:center; }
+    .video-wrap { position:relative; width:min(320px,90vw); height:min(320px,90vw);
+      border-radius:18px; overflow:hidden; border:3px solid #3b5bdb;
+      box-shadow:0 0 40px rgba(59,91,219,0.5); }
+    video { width:100%; height:100%; object-fit:cover; display:block; }
+    .scan-line { position:absolute; left:8%; right:8%; height:2px;
+      background:#3b5bdb; animation:s 2s ease-in-out infinite; }
     @keyframes s { 0%,100%{top:15%} 50%{top:85%} }
-    .c { position:absolute; width:22px; height:22px; border-color:#fff; border-style:solid; }
+    .c{position:absolute;width:22px;height:22px;border-color:#fff;border-style:solid;}
     .tl{top:8px;right:8px;border-width:3px 0 0 3px}
     .tr{top:8px;left:8px;border-width:3px 3px 0 0}
     .bl{bottom:8px;right:8px;border-width:0 0 3px 3px}
@@ -28,17 +27,13 @@
     .status { font-size:13px; font-weight:700; background:rgba(59,91,219,0.2);
       border:1px solid rgba(59,91,219,0.4); border-radius:20px; padding:8px 20px; color:#748ffc; }
     #success { display:none; flex-direction:column; align-items:center; gap:12px; text-align:center; }
-    .big { font-size:64px; }
-    .ok { font-size:22px; font-weight:800; color:#0ca678; }
-    .bk { font-size:17px; font-weight:700; }
-    .cl { font-size:13px; color:rgba(255,255,255,0.5); }
-    #error { display:none; flex-direction:column; align-items:center; gap:12px; text-align:center; }
-    .ei { font-size:52px; }
-    .et { font-size:18px; font-weight:800; color:#e03131; }
-    .es { font-size:13px; color:rgba(255,255,255,0.5); line-height:1.6; max-width:280px; }
-    .btn { padding:12px 28px; background:#3b5bdb; color:#fff; border:none;
-      border-radius:10px; font-size:15px; font-weight:700; cursor:pointer; }
-    canvas { display:none; }
+    .big{font-size:64px} .ok{font-size:22px;font-weight:800;color:#0ca678;}
+    .bk{font-size:17px;font-weight:700;} .cl{font-size:13px;color:rgba(255,255,255,0.5);}
+    #error{display:none;flex-direction:column;align-items:center;gap:12px;text-align:center;}
+    .ei{font-size:52px} .et{font-size:18px;font-weight:800;color:#e03131;}
+    .es{font-size:13px;color:rgba(255,255,255,0.5);line-height:1.6;max-width:280px;}
+    .btn{padding:12px 28px;background:#3b5bdb;color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;}
+    canvas{display:none;}
   </style>
 </head>
 <body>
@@ -62,21 +57,22 @@
   <div id="error">
     <div class="ei">📵</div>
     <div class="et">לא ניתן לגשת למצלמה</div>
-    <div class="es" id="err-msg">ודא שנתת הרשאת מצלמה לדפדפן</div>
+    <div class="es" id="err-msg">ודא שנתת הרשאת מצלמה</div>
     <button class="btn" onclick="location.reload()">🔄 נסה שוב</button>
   </div>
   <canvas id="canvas"></canvas>
+  <img id="ping" style="display:none" width="1" height="1">
 <script>
-  var params   = new URLSearchParams(window.location.search);
-  var GAS_URL  = params.get('gas');   // Apps Script URL
-  var SESSION  = params.get('sid');   // session ID
+  var params  = new URLSearchParams(window.location.search);
+  var GAS_URL = params.get('gas') || '';
+  var SESSION = params.get('sid') || '';
 
-  var video = document.getElementById('video');
-  var canvas = document.getElementById('canvas');
-  var ctx = canvas.getContext('2d');
+  var video   = document.getElementById('video');
+  var canvas  = document.getElementById('canvas');
+  var ctx     = canvas.getContext('2d');
   var scanned = false;
 
-  navigator.mediaDevices.getUserMedia({ video: { facingMode:{ideal:'environment'} } })
+  navigator.mediaDevices.getUserMedia({ video:{ facingMode:{ideal:'environment'} } })
     .then(function(stream) {
       video.srcObject = stream;
       video.play();
@@ -92,13 +88,14 @@
   function tick() {
     if (scanned) return;
     if (video.readyState === video.HAVE_ENOUGH_DATA) {
-      canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+      canvas.width  = video.videoWidth;
+      canvas.height = video.videoHeight;
       ctx.drawImage(video, 0, 0);
-      var img = ctx.getImageData(0,0,canvas.width,canvas.height);
-      var code = jsQR(img.data, img.width, img.height, {inversionAttempts:'dontInvert'});
+      var img  = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      var code = jsQR(img.data, img.width, img.height, { inversionAttempts:'dontInvert' });
       if (code && code.data) {
         scanned = true;
-        video.srcObject.getTracks().forEach(function(t){t.stop();});
+        video.srcObject.getTracks().forEach(function(t){ t.stop(); });
         onScanned(code.data.trim());
         return;
       }
@@ -107,15 +104,18 @@
   }
 
   function onScanned(book) {
+    // הצג מסך הצלחה
     document.getElementById('scan-screen').style.display = 'none';
-    document.getElementById('book-display').textContent = book;
-    document.getElementById('success').style.display = 'flex';
+    document.getElementById('book-display').textContent  = book;
+    document.getElementById('success').style.display     = 'flex';
 
-    // שלח לשרת Apps Script
+    // שלח לשרת דרך img src — עוקף CORS
     if (GAS_URL && SESSION) {
-      fetch(GAS_URL + '?action=scan&sid=' + encodeURIComponent(SESSION) + '&book=' + encodeURIComponent(book))
-        .then(function() { console.log('sent to server'); })
-        .catch(function(e) { console.error(e); });
+      var url = GAS_URL
+        + '?action=scan'
+        + '&sid='  + encodeURIComponent(SESSION)
+        + '&book=' + encodeURIComponent(book);
+      document.getElementById('ping').src = url;
     }
   }
 </script>
