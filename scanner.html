@@ -104,19 +104,24 @@
   }
 
   function onScanned(book) {
-    // הצג מסך הצלחה
     document.getElementById('scan-screen').style.display = 'none';
     document.getElementById('book-display').textContent  = book;
     document.getElementById('success').style.display     = 'flex';
 
-    // שלח לשרת דרך img src — עוקף CORS
-    if (GAS_URL && SESSION) {
-      var url = GAS_URL
-        + '?action=scan'
-        + '&sid='  + encodeURIComponent(SESSION)
-        + '&book=' + encodeURIComponent(book);
-      document.getElementById('ping').src = url;
-    }
+    if (!GAS_URL || !SESSION) return;
+
+    var url = GAS_URL
+      + '?action=scan'
+      + '&sid='  + encodeURIComponent(SESSION)
+      + '&book=' + encodeURIComponent(book);
+
+    // נסה fetch עם no-cors
+    fetch(url, { method: 'GET', mode: 'no-cors' })
+      .catch(function() {
+        // fallback: img ping
+        var img = new Image();
+        img.src = url;
+      });
   }
 </script>
 </body>
