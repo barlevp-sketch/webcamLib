@@ -132,10 +132,17 @@
   var idToBook    = {};
   var idToStudent = {};
 
-  try { idToBook    = JSON.parse(decodeURIComponent(params.get('ids')      || '{}')); } catch(e){}
-  try { idToStudent = JSON.parse(decodeURIComponent(params.get('students') || '{}')); } catch(e){}
+  try { idToBook = JSON.parse(decodeURIComponent(params.get('ids') || '{}')); } catch(e){}
 
   var cv  = document.getElementById('cv');
+
+  // טען תלמידים מהשרת לפי session
+  if (GAS_URL && SESSION) {
+    fetch(GAS_URL + '?action=getStudents&sid=' + encodeURIComponent(SESSION))
+      .then(function(r){ return r.json(); })
+      .then(function(d){ idToStudent = d || {}; })
+      .catch(function(){});
+  }
   var ctx = cv.getContext('2d');
   var timer = null;
   var curStudent   = null;
