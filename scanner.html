@@ -177,7 +177,10 @@
     })
     .then(function(stream){
       v.srcObject = stream; v.play();
-      document.getElementById(statusId).textContent = '🔍 מחפש קוד QR...';
+      var studentCount = Object.keys(idToStudent).length;
+      var bookCount    = Object.keys(idToBook).length;
+      document.getElementById(statusId).textContent =
+        '🔍 מחפש QR... (' + studentCount + ' תלמידים, ' + bookCount + ' ספרים)';
       timer = setInterval(function(){
         if(v.readyState < 2) return;
         cv.width=v.videoWidth; cv.height=v.videoHeight;
