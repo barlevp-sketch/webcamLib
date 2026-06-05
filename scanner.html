@@ -124,14 +124,25 @@
 <canvas id="cv"></canvas>
 
 <script>
-  var params      = new URLSearchParams(window.location.search);
-  var GAS_URL     = params.get('gas')      || '';
-  var SESSION     = params.get('sid')      || '';
+  var params  = new URLSearchParams(window.location.search);
+  var SESSION = params.get('sid') || '';
+  var GAS_URL     = '';
   var idToBook    = {};
   var idToStudent = {};
 
-  try { idToBook    = JSON.parse(decodeURIComponent(params.get('ids')      || '{}')); } catch(e){}
-  try { idToStudent = JSON.parse(decodeURIComponent(params.get('students') || '{}')); } catch(e){}
+  // קרא נתונים מ-sessionStorage של חלון הפותח (נמנע URL ארוך)
+  try {
+    var src = (window.opener && !window.opener.closed) ? window.opener.sessionStorage : sessionStorage;
+    GAS_URL     = src.getItem('lib_gas')      || '';
+    idToBook    = JSON.parse(src.getItem('lib_ids')      || '{}');
+    idToStudent = JSON.parse(src.getItem('lib_students') || '{}');
+    if (!SESSION) SESSION = src.getItem('lib_sid') || '';
+  } catch(e) {
+    // fallback — נסה מ-URL params
+    GAS_URL     = params.get('gas') || '';
+    try { idToBook    = JSON.parse(decodeURIComponent(params.get('ids')      || '{}')); } catch(e2){}
+    try { idToStudent = JSON.parse(decodeURIComponent(params.get('students') || '{}')); } catch(e2){}
+  }
 
   var cv  = document.getElementById('cv');
   var ctx = cv.getContext('2d');
