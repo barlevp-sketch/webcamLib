@@ -52,10 +52,8 @@
     <div class="big">✅</div>
     <div class="ok">זוהה בהצלחה!</div>
     <div class="bk" id="book-display"></div>
-    <div style="display:flex;gap:12px;margin-top:8px;flex-wrap:wrap;justify-content:center;">
-      <button class="btn" onclick="scanAgain()" style="background:#3b5bdb;">📷 סרוק ספר נוסף</button>
-      <button class="btn" onclick="window.close()" style="background:#64748b;">✕ סגור חלון</button>
-    </div>
+    <div class="cl" id="next-countdown">עובר לסריקה הבאה...</div>
+    <button class="btn" onclick="window.close()" style="background:#64748b;margin-top:4px;">✕ סגור מצלמה</button>
   </div>
   <div id="error">
     <div class="ei">📵</div>
@@ -107,10 +105,11 @@
   }
 
   function onScanned(book) {
-    // הצג מסך הצלחה
+    // הצג מסך הצלחה ועבור אוטומטית לסריקה הבאה אחרי 1.5 שניות
     document.getElementById('scan-screen').style.display = 'none';
     document.getElementById('book-display').textContent  = book;
     document.getElementById('success').style.display     = 'flex';
+    setTimeout(function() { scanAgain(); }, 1500);
 
     // שלח לשרת דרך fetch no-cors
     if (GAS_URL && SESSION) {
