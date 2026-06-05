@@ -1,311 +1,471 @@
-<!DOCTYPE html>
-<html dir="rtl" lang="he">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>סורק ספרייה</title>
-  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
-  <style>
-    *{box-sizing:border-box;margin:0;padding:0;}
-    body{font-family:Arial,sans-serif;background:#0f172a;color:#fff;
-      min-height:100dvh;display:flex;flex-direction:column;
-      align-items:center;justify-content:center;gap:14px;padding:16px;}
-    h2{font-size:18px;font-weight:800;text-align:center;}
-    .sub{font-size:13px;color:rgba(255,255,255,0.55);text-align:center;}
-    .vwrap{position:relative;width:min(290px,86vw);height:min(290px,86vw);
-      border-radius:16px;overflow:hidden;border:3px solid #3b5bdb;
-      box-shadow:0 0 30px rgba(59,91,219,0.5);}
-    video{width:100%;height:100%;object-fit:cover;display:block;}
-    .laser{position:absolute;left:8%;right:8%;height:2px;background:#3b5bdb;
-      box-shadow:0 0 8px #3b5bdb;animation:sc 2s ease-in-out infinite;}
-    @keyframes sc{0%,100%{top:15%}50%{top:85%}}
-    .c{position:absolute;width:20px;height:20px;border-color:#fff;border-style:solid;}
-    .tl{top:8px;right:8px;border-width:3px 0 0 3px}
-    .tr{top:8px;left:8px;border-width:3px 3px 0 0}
-    .bl{bottom:8px;right:8px;border-width:0 0 3px 3px}
-    .br{bottom:8px;left:8px;border-width:0 3px 3px 0}
-    .status{font-size:13px;font-weight:700;background:rgba(59,91,219,0.2);
-      border:1px solid rgba(59,91,219,0.4);border-radius:20px;
-      padding:8px 20px;color:#748ffc;text-align:center;max-width:300px;}
-    .student-card{background:rgba(255,255,255,0.08);border:1.5px solid rgba(255,255,255,0.2);
-      border-radius:14px;padding:22px 20px;width:100%;max-width:300px;text-align:center;}
-    .sname{font-size:22px;font-weight:800;margin-bottom:6px;}
-    .scls{font-size:14px;color:rgba(255,255,255,0.6);}
-    .blist{width:100%;max-width:300px;max-height:160px;overflow-y:auto;
-      display:flex;flex-direction:column;gap:5px;}
-    .btag{background:rgba(12,166,120,0.2);border:1px solid #0ca678;border-radius:8px;
-      padding:7px 12px;font-size:13px;font-weight:700;color:#0ca678;
-      display:flex;align-items:center;gap:8px;}
-    .bnum{background:#0ca678;color:#fff;border-radius:50%;width:18px;height:18px;
-      display:flex;align-items:center;justify-content:center;
-      font-size:10px;font-weight:800;flex-shrink:0;}
-    .flist{width:100%;max-width:300px;background:rgba(255,255,255,0.06);
-      border-radius:10px;padding:10px;}
-    .fitem{font-size:13px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.1);}
-    .fitem:last-child{border-bottom:none;}
-    .action-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;width:100%;max-width:300px;}
-    .smini{font-size:12px;font-weight:700;color:rgba(255,255,255,0.6);
-      background:rgba(255,255,255,0.08);padding:5px 14px;border-radius:20px;}
-    .btn{padding:13px;border:none;border-radius:10px;font-size:14px;
-      font-weight:800;cursor:pointer;color:#fff;width:100%;max-width:300px;}
-    .btn-blue{background:#3b5bdb;}
-    .btn-green{background:#0ca678;}
-    .btn-gray{background:rgba(255,255,255,0.12);font-size:13px;font-weight:600;}
-    .btn-borrow{background:#3b5bdb;padding:14px 10px;}
-    .btn-return{background:#64748b;padding:14px 10px;}
-    .screen{display:none;flex-direction:column;align-items:center;gap:12px;width:100%;}
-    .screen.on{display:flex;}
-    canvas{display:none;}
-  </style>
-</head>
-<body>
+// ============================================================
+// קבועים גלובליים (בטוחים לשימוש בכל context)
+// ============================================================
+var CACHE_KEY   = 'libraryData_v2';
+var CACHE_TTL   = 21600;
 
-<!-- שלב 1: סריקת תלמיד -->
-<div id="s1" class="screen on">
-  <h2>👤 שלב 1 — סרוק תלמיד</h2>
-  <div class="sub">כוון לקוד QR של תלמיד</div>
-  <div class="vwrap">
-    <video id="v1" autoplay muted playsinline></video>
-    <div class="laser"></div>
-    <div class="c tl"></div><div class="c tr"></div>
-    <div class="c bl"></div><div class="c br"></div>
-  </div>
-  <div class="status" id="st1">מאתחל מצלמה...</div>
-  <button class="btn btn-gray" onclick="window.close()">✕ סגור</button>
-</div>
+var SHEET_STUDENTS = 'תלמידים';
+var SHEET_BOOKS    = 'ספרים';
+var SHEET_DB       = 'בסיס נתונים';
+var SHEET_QR       = 'QR ספרים';
 
-<!-- שלב 2: אישור תלמיד -->
-<div id="s2" class="screen">
-  <h2>✅ זיהוי תלמיד</h2>
-  <div class="student-card">
-    <div style="font-size:44px;margin-bottom:10px;">👤</div>
-    <div class="sname" id="s2-name"></div>
-    <div class="scls"  id="s2-cls"></div>
-  </div>
-  <button class="btn btn-green" onclick="confirmStudent()">✓ אישור — עבור לסריקת ספרים</button>
-  <button class="btn btn-gray"  onclick="rescanStudent()">🔄 לא נכון — סרוק שוב</button>
-</div>
+var GRADE_PREFIX = { 0: 'Z', 1: 'C', 2: 'T' };
+var GRADES       = ['ז', 'ח', 'ט'];
 
-<!-- שלב 3: סריקת ספרים -->
-<div id="s3" class="screen">
-  <div class="smini" id="s3-name"></div>
-  <h2>📚 שלב 2 — סרוק ספרים</h2>
-  <div class="sub">סרוק כל ספר בתורו</div>
-  <div class="vwrap">
-    <video id="v2" autoplay muted playsinline></video>
-    <div class="laser"></div>
-    <div class="c tl"></div><div class="c tr"></div>
-    <div class="c bl"></div><div class="c br"></div>
-  </div>
-  <div class="status" id="st3">מחפש ספר...</div>
-  <div class="blist" id="blist"></div>
-  <button class="btn btn-blue"  onclick="goFinish()">✓ סיום סריקת ספרים</button>
-  <button class="btn btn-gray"  onclick="window.close()">✕ סגור</button>
-</div>
+// פונקציות עזר לגישה בטוחה לשירותים
+function getSS()    { return SpreadsheetApp.getActiveSpreadsheet(); }
+function getProps() { return PropertiesService.getScriptProperties(); }
+function getCache() { return CacheService.getScriptCache(); }
 
-<!-- שלב 4: בחר פעולה -->
-<div id="s4" class="screen">
-  <div class="smini" id="s4-name"></div>
-  <h2>📋 בחר פעולה</h2>
-  <div class="flist" id="flist"></div>
-  <div class="action-grid">
-    <button class="btn btn-borrow" onclick="sendAction('השאלה')">📥 השאלה</button>
-    <button class="btn btn-return" onclick="sendAction('החזרה')">📤 החזרה</button>
-  </div>
-  <button class="btn btn-gray" style="margin-top:4px;" onclick="window.close()">✕ סגור</button>
-</div>
-
-<div id="serr" class="screen">
-  <div style="font-size:48px">📵</div>
-  <div style="font-size:17px;font-weight:800;color:#e03131;">לא ניתן לגשת למצלמה</div>
-  <div style="font-size:13px;color:rgba(255,255,255,0.5);" id="errmsg"></div>
-  <button class="btn btn-blue" onclick="location.reload()">🔄 נסה שוב</button>
-</div>
-
-<canvas id="cv"></canvas>
-
-<script>
-  // ── נתונים מ-URL params ──
-  var params      = new URLSearchParams(window.location.search);
-  var SESSION     = params.get('sid') || '';
-  var GAS_URL     = params.get('gas') || '';
-  var idToBook    = {};
-  var idToStudent = {};
-
-  try { idToBook = JSON.parse(decodeURIComponent(params.get('ids') || '{}')); } catch(e){}
-
-  var cv  = document.getElementById('cv');
-
-  // טען תלמידים מהשרת לפי session
-  if (GAS_URL && SESSION) {
-    fetch(GAS_URL + '?action=getStudents&sid=' + encodeURIComponent(SESSION))
-      .then(function(r){ return r.json(); })
-      .then(function(d){ idToStudent = d || {}; })
-      .catch(function(){});
+// ============================================================
+// doGet — ניתוב
+// ============================================================
+function doGet(e) {
+  if (e && e.parameter && e.parameter.action === 'getStudents') {
+    var sid = e.parameter.sid || '';
+    var students = sid ? getStudentsForSession(sid) : {};
+    return ContentService.createTextOutput(JSON.stringify(students))
+      .setMimeType(ContentService.MimeType.JSON);
   }
-  var ctx = cv.getContext('2d');
-  var timer = null;
-  var curStudent   = null;
-  var scannedBooks = [];
-
-  function show(id) {
-    ['s1','s2','s3','s4','serr'].forEach(function(s){
-      document.getElementById(s).className = 'screen' + (s===id?' on':'');
-    });
+  if (e && e.parameter && e.parameter.action === 'scan') {
+    var sid  = e.parameter.sid  || '';
+    var book = e.parameter.book || '';
+    if (sid && book) getProps().setProperty('SCAN_' + sid, book);
+    return ContentService.createTextOutput('OK').setMimeType(ContentService.MimeType.TEXT);
   }
-
-  function stopTimer() { if(timer){clearInterval(timer);timer=null;} }
-
-  function stopCam(vid) {
-    var v=document.getElementById(vid);
-    if(v&&v.srcObject) v.srcObject.getTracks().forEach(function(t){t.stop();});
+  if (e && e.parameter && e.parameter.action === 'bulkScan') {
+    try {
+      var sid  = e.parameter.sid  || '';
+      var data = JSON.parse(decodeURIComponent(e.parameter.data || '{}'));
+      if (sid) getProps().setProperty('BULK_' + sid, JSON.stringify(data));
+    } catch(ex) {}
+    return ContentService.createTextOutput('OK').setMimeType(ContentService.MimeType.TEXT);
   }
-
-  function startCam(vid, statusId, onCode) {
-    stopTimer();
-    var v = document.getElementById(vid);
-    navigator.mediaDevices.getUserMedia({
-      video:{ facingMode:{ideal:'environment'}, width:{ideal:1280}, height:{ideal:720} }
-    })
-    .then(function(stream){
-      v.srcObject = stream; v.play();
-      document.getElementById(statusId).textContent = '🔍 מחפש קוד QR...';
-      timer = setInterval(function(){
-        if(v.readyState < 2) return;
-        cv.width=v.videoWidth; cv.height=v.videoHeight;
-        ctx.drawImage(v,0,0);
-        var img = ctx.getImageData(0,0,cv.width,cv.height);
-        var code = jsQR(img.data,img.width,img.height,{inversionAttempts:'dontInvert'})
-                || jsQR(img.data,img.width,img.height,{inversionAttempts:'invertFirst'});
-        if(code&&code.data) onCode(code.data.trim());
-      }, 150);
-    })
-    .catch(function(err){
-      document.getElementById('errmsg').textContent = err.message;
-      show('serr');
-    });
+  if (e && e.parameter && e.parameter.admin === 'true') {
+    return HtmlService.createHtmlOutputFromFile('Admin')
+      .setTitle('ניהול מערכת').addMetaTag('viewport', 'width=device-width, initial-scale=1')
+      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
   }
-
-  function beep() {
-    try{
-      var ac=new(window.AudioContext||window.webkitAudioContext)();
-      var o=ac.createOscillator(),g=ac.createGain();
-      o.connect(g);g.connect(ac.destination);
-      o.frequency.value=880;o.type='sine';
-      g.gain.setValueAtTime(0.3,ac.currentTime);
-      g.gain.exponentialRampToValueAtTime(0.001,ac.currentTime+0.2);
-      o.start(ac.currentTime);o.stop(ac.currentTime+0.2);
-    }catch(e){}
+  if (e && e.parameter && e.parameter.page === 'report') {
+    return HtmlService.createHtmlOutputFromFile('Report')
+      .setTitle('דוחות ספרייה').addMetaTag('viewport', 'width=device-width, initial-scale=1')
+      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
   }
+  return HtmlService.createHtmlOutputFromFile('Index')
+    .setTitle('מערכת השאלת ספרים').addMetaTag('viewport', 'width=device-width, initial-scale=1')
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
 
-  // ── שלב 1: סריקת תלמיד ──
-  startCam('v1','st1', function(code){
-    var s = idToStudent[code];
-    if(!s){
-      document.getElementById('st1').textContent = '⚠️ לא זוהה כתלמיד — נסה שוב';
-      return;
+// ============================================================
+// תפריט ודיאלוגים
+// ============================================================
+function onOpen() {
+  SpreadsheetApp.getUi()
+    .createMenu('📚 מערכת ספרייה')
+    .addItem('📥 ממשק משתמש',              'showSidebar')
+    .addItem('⚙️ ממשק מנהל',               'showAdminSidebar')
+    .addItem('📊 דוחות',                    'showReportDialog')
+    .addItem('🔲 מחולל QR לספרים',          'showQRGenerator')
+    .addItem('🔄 עדכן ספרים + מיין + Cache','manualUpdate')
+    .addSeparator()
+    .addItem('🔑 שינוי סיסמת מנהל',        'changeAdminPassword')
+    .addItem('🔄 ייבוא נתונים',             'showImportDialog')
+    .addToUi();
+}
+
+function showSidebar() {
+  SpreadsheetApp.getUi().showSidebar(
+    HtmlService.createHtmlOutputFromFile('Index').setTitle('מערכת השאלת ספרים'));
+}
+function showAdminSidebar() {
+  SpreadsheetApp.getUi().showSidebar(
+    HtmlService.createHtmlOutputFromFile('Admin').setTitle('ממשק מנהל'));
+}
+function showReportDialog() {
+  SpreadsheetApp.getUi().showModalDialog(
+    HtmlService.createHtmlOutputFromFile('Report').setWidth(1300).setHeight(950), 'דוחות ספרייה');
+}
+function showQRGenerator() {
+  SpreadsheetApp.getUi().showModalDialog(
+    HtmlService.createHtmlOutputFromFile('QRGenerator').setWidth(1000).setHeight(700), 'מחולל QR');
+}
+function showImportDialog() {
+  SpreadsheetApp.getUi().showModalDialog(
+    HtmlService.createHtmlOutputFromFile('ImportDialog').setWidth(550).setHeight(450), ' ');
+}
+function showAdminDialog() {
+  SpreadsheetApp.getUi().showModalDialog(
+    HtmlService.createHtmlOutputFromFile('Admin').setWidth(400).setHeight(350), 'ניהול');
+}
+
+// ============================================================
+// סיסמת מנהל
+// ============================================================
+function changeAdminPassword() {
+  var ui     = SpreadsheetApp.getUi();
+  var result = ui.prompt('שינוי סיסמת מנהל', 'הכנס סיסמה חדשה:', ui.ButtonSet.OK_CANCEL);
+  if (result.getSelectedButton() !== ui.Button.OK) return;
+  var newPass = result.getResponseText().trim();
+  if (newPass.length < 3) { ui.alert('הסיסמה חייבת להכיל לפחות 3 תווים.'); return; }
+  getProps().setProperty('ADMIN_PASSWORD', newPass);
+  ui.alert('✅ הסיסמה עודכנה!');
+}
+
+function verifyAdminPassword(input) {
+  var stored = getProps().getProperty('ADMIN_PASSWORD') || '1234';
+  return input === stored;
+}
+
+// ============================================================
+// סטטוס מערכת — מבוסס תא I1 בגיליון בסיס נתונים
+// ============================================================
+function getSystemStatus() {
+  var db = getSS().getSheetByName(SHEET_DB);
+  if (!db) return 'open';
+  var val = String(db.getRange('I1').getValue()).trim();
+  return val === 'סגור' ? 'closed' : 'open';
+}
+
+function setSystemStatus(status) {
+  if (status !== 'open' && status !== 'closed') return;
+  var db = getSS().getSheetByName(SHEET_DB);
+  if (!db) return;
+  db.getRange('I1').setValue(status === 'closed' ? 'סגור' : 'פתוח');
+  SpreadsheetApp.flush();
+}
+
+// ============================================================
+// שליפת נתונים
+// ============================================================
+function getData() {
+  if (getSystemStatus() === 'closed') throw new Error('SYSTEM_CLOSED');
+  var cached = getCache().get(CACHE_KEY);
+  if (cached) return JSON.parse(cached);
+  return fetchAndCacheData();
+}
+
+function getDataAdmin() {
+  var cached = getCache().get(CACHE_KEY);
+  if (cached) return JSON.parse(cached);
+  return fetchAndCacheData();
+}
+
+function fetchAndCacheData() {
+  var students = [];
+  var studentSheet = getSS().getSheetByName(SHEET_STUDENTS);
+  if (studentSheet) {
+    var sData = studentSheet.getDataRange().getValues();
+    for (var i = 1; i < sData.length; i++) {
+      var tz = sData[i][9], name = sData[i][10], cls = sData[i][11];
+      if (name && cls) students.push({
+        id: String(tz || ''), fullName: String(name),
+        classGroup: String(cls), grade: String(cls).trim().charAt(0)
+      });
     }
-    beep();
-    stopTimer(); stopCam('v1');
-    curStudent = { id:code, fullName:s.fullName, classGroup:s.classGroup };
-    document.getElementById('s2-name').textContent = s.fullName;
-    document.getElementById('s2-cls').textContent  = 'כיתה: ' + s.classGroup;
-    show('s2');
+  }
+
+  var books   = { 'ז': [], 'ח': [], 'ט': [] };
+  var bookIds = {};
+  var bookSheet = getSS().getSheetByName(SHEET_BOOKS);
+  if (bookSheet) {
+    var bData = bookSheet.getDataRange().getValues();
+    for (var r = 1; r < bData.length; r++) {
+      for (var g = 0; g < 3; g++) {
+        var bookName = bData[r][g] ? String(bData[r][g]).trim() : '';
+        if (!bookName) continue;
+        books[GRADES[g]].push(bookName);
+        var customId = (bData[r][g+3] && String(bData[r][g+3]).trim())
+          ? String(bData[r][g+3]).trim()
+          : GRADE_PREFIX[g] + String(r).padStart(2, '0');
+        bookIds[customId] = bookName;
+      }
+    }
+  }
+
+  var borrowed = {};
+  var dbSheet = getSS().getSheetByName(SHEET_DB);
+  if (dbSheet) {
+    var dbData  = dbSheet.getDataRange().getValues();
+    var tracking = {};
+    for (var j = 1; j < dbData.length; j++) {
+      var row     = dbData[j];
+      var bName   = String(row[1] || '').trim();
+      var bBook   = String(row[3] || '').trim();
+      var bAction = String(row[4] || '').trim();
+      var bId     = row.length > 5 ? String(row[5] || '').trim() : '';
+      var uKey    = bId || bName;
+      if (!uKey) continue;
+      if (!tracking[uKey]) tracking[uKey] = {};
+      if (bAction === 'השאלה') tracking[uKey][bBook] = (tracking[uKey][bBook] || 0) + 1;
+      else if (bAction === 'החזרה') tracking[uKey][bBook] = (tracking[uKey][bBook] || 0) - 1;
+    }
+    for (var k in tracking) {
+      borrowed[k] = [];
+      for (var bk in tracking[k]) { if (tracking[k][bk] > 0) borrowed[k].push(bk); }
+    }
+  }
+
+  var result = { students: students, books: books, borrowed: borrowed, bookIds: bookIds };
+  getCache().put(CACHE_KEY, JSON.stringify(result), CACHE_TTL);
+  return result;
+}
+
+// ============================================================
+// רישום פעולות
+// ============================================================
+function logAction(studentId, studentName, classGroup, bookName, actionType) {
+  if (getSystemStatus() === 'closed')
+    return { success: false, message: 'המערכת סגורה.' };
+  return writeAction(studentId, studentName, classGroup, bookName, actionType);
+}
+
+function logActionAdmin(studentId, studentName, classGroup, bookName, actionType) {
+  return writeAction(studentId, studentName, classGroup, bookName, actionType);
+}
+
+function writeAction(studentId, studentName, classGroup, bookName, actionType) {
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(30000);
+    var dbSheet = getSS().getSheetByName(SHEET_DB);
+    if (!dbSheet) throw new Error("גיליון '" + SHEET_DB + "' לא נמצא.");
+    dbSheet.appendRow([new Date(), studentName, classGroup, bookName, actionType, studentId]);
+
+    var cached = getCache().get(CACHE_KEY);
+    if (cached) {
+      var data   = JSON.parse(cached);
+      var uKey   = studentId || studentName;
+      if (!data.borrowed[uKey]) data.borrowed[uKey] = [];
+      if (actionType === 'השאלה') {
+        if (!data.borrowed[uKey].includes(bookName)) data.borrowed[uKey].push(bookName);
+      } else if (actionType === 'החזרה') {
+        data.borrowed[uKey] = data.borrowed[uKey].filter(function(b) { return b !== bookName; });
+      }
+      getCache().put(CACHE_KEY, JSON.stringify(data), CACHE_TTL);
+    } else {
+      getCache().remove(CACHE_KEY);
+    }
+    return { success: true };
+  } catch(e) {
+    return { success: false, message: e.message };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// ============================================================
+// QR — שמירה וקריאה
+// ============================================================
+function getSavedQRBooks() {
+  var sheet = getSS().getSheetByName(SHEET_QR);
+  if (!sheet) return [];
+  return sheet.getDataRange().getValues().slice(1)
+    .filter(function(r) { return r[0]; })
+    .map(function(r) { return String(r[0]); });
+}
+
+function saveQRToSheet(booksData) {
+  try {
+    var sheet = getSS().getSheetByName(SHEET_QR) || getSS().insertSheet(SHEET_QR);
+    sheet.clearContents();
+    sheet.getRange('A1:D1').setValues([['שם ספר','שכבה','תאריך יצירה','QR (Data URL)']]);
+    sheet.getRange('A1:D1').setFontWeight('bold').setBackground('#3b5bdb').setFontColor('#fff');
+    sheet.setColumnWidths(1, 4, [200, 80, 130, 300]);
+    sheet.setFrozenRows(1);
+    var rows = booksData.map(function(b) { return [b.book, b.grade, new Date(), b.qrDataUrl]; });
+    if (rows.length) sheet.getRange(2, 1, rows.length, 4).setValues(rows);
+    return { success: true, count: rows.length };
+  } catch(e) {
+    return { success: false, message: e.message };
+  }
+}
+
+// ============================================================
+// סריקת QR
+// ============================================================
+function getScanResult(sid) {
+  var key = 'SCAN_' + sid;
+  var val = getProps().getProperty(key);
+  if (val) { getProps().deleteProperty(key); return val; }
+  return null;
+}
+
+function getScriptUrl() {
+  return ScriptApp.getService().getUrl();
+}
+
+// ============================================================
+// Cache
+// ============================================================
+function clearCache() {
+  getCache().remove(CACHE_KEY);
+  return 'Cache cleared';
+}
+
+// ============================================================
+// מיון גיליון ספרים לפי א-ב
+// ============================================================
+function sortBooksSheet() {
+  var sheet = getSS().getSheetByName(SHEET_BOOKS);
+  if (!sheet) return;
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return;
+  var numRows = lastRow - 1;
+
+  [0, 1, 2].forEach(function(col) {
+    var range  = sheet.getRange(2, col + 1, numRows, 1);
+    var vals   = range.getValues().map(function(r) { return r[0]; });
+    var filled = vals.filter(function(v) { return v !== '' && v !== null; });
+    filled.sort(function(a, b) { return String(a).localeCompare(String(b), 'he'); });
+    while (filled.length < numRows) filled.push('');
+    range.setValues(filled.map(function(v) { return [v]; }));
+  });
+}
+
+// ============================================================
+// עדכון QR ספרים — ספרים חדשים בלבד
+// ============================================================
+function autoUpdateQR() {
+  getCache().remove(CACHE_KEY);
+  var data    = fetchAndCacheData();
+  var qrSheet = getSS().getSheetByName(SHEET_QR) || getSS().insertSheet(SHEET_QR);
+
+  // בדוק ספרים קיימים
+  var existing = {};
+  qrSheet.getDataRange().getValues().slice(1).forEach(function(r) {
+    if (r[0]) existing[String(r[0])] = true;
   });
 
-  function rescanStudent() {
-    curStudent = null; show('s1');
-    startCam('v1','st1', function(code){
-      var s = idToStudent[code];
-      if(!s){ document.getElementById('st1').textContent='⚠️ לא זוהה כתלמיד'; return; }
-      beep(); stopTimer(); stopCam('v1');
-      curStudent = { id:code, fullName:s.fullName, classGroup:s.classGroup };
-      document.getElementById('s2-name').textContent = s.fullName;
-      document.getElementById('s2-cls').textContent  = 'כיתה: ' + s.classGroup;
-      show('s2');
-    });
-  }
-
-  // ── שלב 2: אישור → ספרים ──
-  function confirmStudent() {
-    scannedBooks = [];
-    document.getElementById('s3-name').textContent = curStudent.fullName+' | '+curStudent.classGroup;
-    document.getElementById('s4-name').textContent = curStudent.fullName+' | '+curStudent.classGroup;
-    renderBooks();
-    show('s3');
-    startCam('v2','st3', function(code){
-      var name = idToBook[code] || code;
-      if(scannedBooks.some(function(b){return b.id===code;})){
-        document.getElementById('st3').textContent='⚠️ '+name+' — כבר נסרק';
-        setTimeout(function(){document.getElementById('st3').textContent='🔍 מחפש ספר...';},1500);
-        return;
+  // בנה שורות חדשות
+  var newRows = [];
+  var gPrefix = { 'ז': 'Z', 'ח': 'C', 'ט': 'T' };
+  GRADES.forEach(function(grade) {
+    (data.books[grade] || []).forEach(function(book, idx) {
+      if (!existing[book]) {
+        newRows.push([book, grade, new Date(), gPrefix[grade] + String(idx+1).padStart(2,'0'), '(צור QR מהמחולל)']);
       }
-      beep();
-      scannedBooks.push({id:code,name:name});
-      renderBooks();
-      document.getElementById('st3').textContent='✅ '+name;
-      setTimeout(function(){document.getElementById('st3').textContent='🔍 מחפש ספר...';},1500);
     });
+  });
+
+  // הוסף כותרות אם ריק
+  if (qrSheet.getLastRow() === 0) {
+    qrSheet.getRange('A1:E1').setValues([['שם ספר','שכבה','תאריך','מזהה','QR']]);
+    qrSheet.getRange('A1:E1').setFontWeight('bold').setBackground('#3b5bdb').setFontColor('#fff');
+    qrSheet.setFrozenRows(1);
   }
 
-  function renderBooks() {
-    var l=document.getElementById('blist'); l.innerHTML='';
-    scannedBooks.forEach(function(b,i){
-      var t=document.createElement('div'); t.className='btag';
-      t.innerHTML='<span class="bnum">'+(i+1)+'</span>'+b.name;
-      l.appendChild(t);
-    });
+  if (newRows.length) {
+    qrSheet.getRange(qrSheet.getLastRow() + 1, 1, newRows.length, 5).setValues(newRows);
   }
 
-  // ── שלב 3: סיום ──
-  function goFinish() {
-    if(!scannedBooks.length){
-      document.getElementById('st3').textContent='⚠️ סרוק לפחות ספר אחד';
-      return;
-    }
-    stopTimer(); stopCam('v2');
-    document.getElementById('flist').innerHTML =
-      scannedBooks.map(function(b,i){
-        return '<div class="fitem">'+(i+1)+'. '+b.name+'</div>';
-      }).join('');
-    show('s4');
+  // מיון
+  sortBooksSheet();
+
+  // Toast
+  getSS().toast(
+    newRows.length ? newRows.length + ' ספרים חדשים נוספו ✅' : 'Cache נוקה, אין ספרים חדשים ✅',
+    '🔄 עדכון הושלם', 30
+  );
+}
+
+// ============================================================
+// עדכון ידני מהתפריט
+// ============================================================
+function manualUpdate() {
+  try { autoUpdateQR(); }
+  catch(e) { SpreadsheetApp.getUi().alert('שגיאה: ' + e.message); }
+}
+
+// ============================================================
+// onEdit — ללא פעולה אוטומטית
+// ============================================================
+function onEdit(e) {}
+
+// ============================================================
+// קודי גישה זמניים
+// ============================================================
+function setAccessCode(code, endTime) {
+  // endTime = "14:00"
+  getProps().setProperty('ACCESS_CODE', String(code).trim());
+  getProps().setProperty('ACCESS_END_TIME', String(endTime).trim());
+}
+
+function getAccessCodeStatus() {
+  return {
+    code:    getProps().getProperty('ACCESS_CODE')    || '',
+    endTime: getProps().getProperty('ACCESS_END_TIME') || ''
+  };
+}
+
+function verifyAccessCode(inputCode) {
+  var stored  = getProps().getProperty('ACCESS_CODE')    || '';
+  var endTime = getProps().getProperty('ACCESS_END_TIME') || '';
+  if (!stored) return { valid: true, reason: 'no_code' }; // אם אין קוד — פתוח לכולם
+
+  if (String(inputCode).trim() !== stored)
+    return { valid: false, reason: 'wrong_code' };
+
+  // בדוק שעת סיום
+  if (endTime) {
+    var now   = new Date();
+    var parts = endTime.split(':');
+    var end   = new Date();
+    end.setHours(parseInt(parts[0]), parseInt(parts[1] || 0), 0, 0);
+    if (now > end) return { valid: false, reason: 'expired', endTime: endTime };
   }
 
-  // ── שלב 4: שלח ──
-  function sendAction(action) {
-    var payload = {
-      studentId:   curStudent.id,
-      studentName: curStudent.fullName,
-      classGroup:  curStudent.classGroup,
-      books:       scannedBooks.map(function(b){return b.name;}),
-      action:      action
-    };
+  return { valid: true, endTime: endTime };
+}
 
-    try {
-      if(window.opener&&!window.opener.closed) {
-        window.opener.postMessage({
-          type:'BULK_SCAN',
-          student:curStudent,
-          books:payload.books,
-          action:action
-        },'*');
-      }
-    } catch(e){}
+function checkAccessExpiry(endTime) {
+  if (!endTime) return { expired: false };
+  var now   = new Date();
+  var parts = endTime.split(':');
+  var end   = new Date();
+  end.setHours(parseInt(parts[0]), parseInt(parts[1] || 0), 0, 0);
+  return { expired: now > end };
+}
 
-    if(GAS_URL&&SESSION) {
-      var url=GAS_URL+'?action=bulkScan&sid='+encodeURIComponent(SESSION)
-             +'&data='+encodeURIComponent(JSON.stringify(payload));
-      fetch(url,{mode:'no-cors'}).catch(function(){});
-    }
-
-    document.body.innerHTML='<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100dvh;gap:14px;text-align:center;padding:20px;">'
-      +'<div style="font-size:60px">✅</div>'
-      +'<div style="font-size:20px;font-weight:800;">'+action+' נרשמה!</div>'
-      +'<div style="font-size:14px;color:rgba(255,255,255,0.6);">'+scannedBooks.length+' ספרים עבור '+curStudent.fullName+'</div>'
-      +'<div style="font-size:12px;color:rgba(255,255,255,0.35);margin-top:4px;">החלון ייסגר...</div>'
-      +'</div>';
-    setTimeout(function(){window.close();},2000);
+function getCombinedStatus() {
+  var db = getSS().getSheetByName(SHEET_DB);
+  var accessMode = 'open'; // ברירת מחדל
+  if (db) {
+    var l1 = String(db.getRange('L1').getValue()).trim();
+    accessMode = (l1 === 'סגור') ? 'closed' : 'open';
   }
-</script>
-</body>
-</html>
+  var codeStatus = getAccessCodeStatus();
+  return {
+    systemStatus: getSystemStatus(),
+    accessMode:   accessMode,
+    code:         codeStatus.code,
+    endTime:      codeStatus.endTime
+  };
+}
+
+function getAccessMode() {
+  var db = getSS().getSheetByName(SHEET_DB);
+  if (!db) return 'open';
+  var l1 = String(db.getRange('L1').getValue()).trim();
+  return (l1 === 'סגור') ? 'closed' : 'open';
+}
+
+function setAccessMode(mode) {
+  var db = getSS().getSheetByName(SHEET_DB);
+  if (!db) return;
+  db.getRange('L1').setValue(mode === 'closed' ? 'סגור' : 'פתוח');
+  SpreadsheetApp.flush();
+}
+
+// ============================================================
+// שמירת תלמידים לפי session — לשימוש הסורק
+// ============================================================
+function saveStudentsForSession(sid, students) {
+  // שמור ב-Cache ל-10 דקות
+  getCache().put('STU_' + sid, JSON.stringify(students), 600);
+}
+
+function getStudentsForSession(sid) {
+  var val = getCache().get('STU_' + sid);
+  if (val) return JSON.parse(val);
+  return {};
+}
