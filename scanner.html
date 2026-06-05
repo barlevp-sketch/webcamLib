@@ -3,190 +3,352 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>סורק ספרים</title>
+  <title>סורק ספרייה</title>
   <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
   <style>
     * { box-sizing:border-box; margin:0; padding:0; }
     body { font-family:Arial,sans-serif; background:#0f172a; color:#fff;
-      height:100dvh; display:flex; flex-direction:column;
-      align-items:center; justify-content:center; gap:20px; padding:20px; }
-    h2 { font-size:20px; font-weight:800; text-align:center; }
+      min-height:100dvh; display:flex; flex-direction:column;
+      align-items:center; justify-content:center; gap:16px; padding:16px; }
+
+    h2 { font-size:18px; font-weight:800; text-align:center; }
     .sub { font-size:13px; color:rgba(255,255,255,0.55); text-align:center; }
-    .video-wrap { position:relative; width:min(320px,90vw); height:min(320px,90vw);
-      border-radius:18px; overflow:hidden; border:3px solid #3b5bdb;
-      box-shadow:0 0 40px rgba(59,91,219,0.5); }
+
+    .video-wrap { position:relative; width:min(300px,88vw); height:min(300px,88vw);
+      border-radius:16px; overflow:hidden; border:3px solid #3b5bdb;
+      box-shadow:0 0 40px rgba(59,91,219,0.5); flex-shrink:0; }
     video { width:100%; height:100%; object-fit:cover; display:block; }
     .scan-line { position:absolute; left:8%; right:8%; height:2px;
       background:#3b5bdb; animation:s 2s ease-in-out infinite; }
     @keyframes s { 0%,100%{top:15%} 50%{top:85%} }
-    .c{position:absolute;width:22px;height:22px;border-color:#fff;border-style:solid;}
+    .c{position:absolute;width:20px;height:20px;border-color:#fff;border-style:solid;}
     .tl{top:8px;right:8px;border-width:3px 0 0 3px}
     .tr{top:8px;left:8px;border-width:3px 3px 0 0}
     .bl{bottom:8px;right:8px;border-width:0 0 3px 3px}
     .br{bottom:8px;left:8px;border-width:0 3px 3px 0}
+
     .status { font-size:13px; font-weight:700; background:rgba(59,91,219,0.2);
-      border:1px solid rgba(59,91,219,0.4); border-radius:20px; padding:8px 20px; color:#748ffc; }
-    #success { display:none; flex-direction:column; align-items:center; gap:12px; text-align:center; }
-    .big{font-size:64px} .ok{font-size:22px;font-weight:800;color:#0ca678;}
-    .bk{font-size:17px;font-weight:700;} .cl{font-size:13px;color:rgba(255,255,255,0.5);}
-    #error{display:none;flex-direction:column;align-items:center;gap:12px;text-align:center;}
-    .ei{font-size:52px} .et{font-size:18px;font-weight:800;color:#e03131;}
-    .es{font-size:13px;color:rgba(255,255,255,0.5);line-height:1.6;max-width:280px;}
-    .btn{padding:12px 28px;background:#64748b;color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;}
-    canvas{display:none;}
+      border:1px solid rgba(59,91,219,0.4); border-radius:20px;
+      padding:8px 20px; color:#748ffc; text-align:center; }
+
+    /* מסך אישור תלמיד */
+    #student-confirm { display:none; flex-direction:column; align-items:center; gap:14px; text-align:center; width:100%; max-width:320px; }
+    .student-card { background:rgba(255,255,255,0.08); border:1.5px solid rgba(255,255,255,0.2); border-radius:14px; padding:20px; width:100%; }
+    .student-name { font-size:22px; font-weight:800; margin-bottom:6px; }
+    .student-class { font-size:14px; color:rgba(255,255,255,0.6); }
+    .btn-confirm { padding:14px 32px; background:#0ca678; color:#fff; border:none; border-radius:12px; font-size:16px; font-weight:800; cursor:pointer; width:100%; }
+    .btn-rescan  { padding:10px; background:rgba(255,255,255,0.1); color:#fff; border:none; border-radius:10px; font-size:13px; cursor:pointer; width:100%; }
+
+    /* מסך סריקת ספרים */
+    #books-screen { display:none; flex-direction:column; align-items:center; gap:12px; width:100%; max-width:340px; }
+    .student-mini { font-size:13px; font-weight:700; color:rgba(255,255,255,0.7); background:rgba(255,255,255,0.08); padding:6px 16px; border-radius:20px; }
+    .books-scanned { width:100%; max-height:160px; overflow-y:auto; display:flex; flex-direction:column; gap:6px; }
+    .book-tag { background:rgba(12,166,120,0.2); border:1px solid #0ca678; border-radius:8px; padding:8px 14px; font-size:14px; font-weight:700; color:#0ca678; display:flex; align-items:center; gap:8px; }
+    .book-tag .num { background:#0ca678; color:#fff; border-radius:50%; width:20px; height:20px; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:800; flex-shrink:0; }
+    .btn-finish { padding:14px; background:#3b5bdb; color:#fff; border:none; border-radius:12px; font-size:15px; font-weight:800; cursor:pointer; width:100%; }
+    .btn-close-scan { padding:10px; background:rgba(255,255,255,0.1); color:#fff; border:none; border-radius:10px; font-size:13px; cursor:pointer; width:100%; }
+
+    /* מסך סיום */
+    #finish-screen { display:none; flex-direction:column; align-items:center; gap:12px; text-align:center; width:100%; max-width:320px; }
+    .finish-title { font-size:20px; font-weight:800; }
+    .action-btns { display:grid; grid-template-columns:1fr 1fr; gap:10px; width:100%; }
+    .btn-action { padding:14px; border:none; border-radius:12px; font-size:15px; font-weight:800; cursor:pointer; color:#fff; }
+    .btn-borrow { background:#3b5bdb; }
+    .btn-return { background:#64748b; }
+    .finish-list { width:100%; background:rgba(255,255,255,0.05); border-radius:10px; padding:12px; }
+    .finish-item { font-size:13px; padding:4px 0; border-bottom:1px solid rgba(255,255,255,0.1); }
+    .finish-item:last-child { border-bottom:none; }
+
+    /* שגיאה */
+    #error { display:none; flex-direction:column; align-items:center; gap:12px; text-align:center; }
+    .btn { padding:12px 28px; background:#3b5bdb; color:#fff; border:none; border-radius:10px; font-size:15px; font-weight:700; cursor:pointer; }
+
+    canvas { display:none; }
   </style>
 </head>
 <body>
-  <div id="scan-screen" style="display:flex;flex-direction:column;align-items:center;gap:20px;width:100%">
-    <h2>📷 סריקת ספר</h2>
-    <div class="sub">כוון את המצלמה לקוד QR על הספר</div>
-    <div class="video-wrap">
-      <video id="video" autoplay muted playsinline></video>
-      <div class="scan-line"></div>
-      <div class="c tl"></div><div class="c tr"></div>
-      <div class="c bl"></div><div class="c br"></div>
-    </div>
-    <div class="status" id="status">מאתחל מצלמה...</div>
-    <button class="btn" onclick="window.close()">✕ סגור מצלמה</button>
-  </div>
 
-  <div id="success">
-    <div class="big">✅</div>
-    <div class="ok">זוהה בהצלחה!</div>
-    <div class="bk" id="book-display"></div>
-    <div class="cl">עובר לסריקה הבאה...</div>
-    <button class="btn" onclick="window.close()">✕ סגור מצלמה</button>
+<!-- מסך סריקה -->
+<div id="scan-screen" style="display:flex;flex-direction:column;align-items:center;gap:16px;width:100%">
+  <h2 id="scan-title">📷 סרוק תלמיד</h2>
+  <div class="sub" id="scan-sub">כוון את המצלמה לקוד QR של התלמיד</div>
+  <div class="video-wrap">
+    <video id="video" autoplay muted playsinline></video>
+    <div class="scan-line"></div>
+    <div class="c tl"></div><div class="c tr"></div>
+    <div class="c bl"></div><div class="c br"></div>
   </div>
+  <div class="status" id="status">מאתחל מצלמה...</div>
+  <button class="btn-rescan" onclick="window.close()">✕ סגור</button>
+</div>
 
-  <div id="error">
-    <div class="ei">📵</div>
-    <div class="et">לא ניתן לגשת למצלמה</div>
-    <div class="es" id="err-msg">ודא שנתת הרשאת מצלמה</div>
-    <button class="btn" onclick="location.reload()">🔄 נסה שוב</button>
+<!-- אישור תלמיד -->
+<div id="student-confirm">
+  <h2>✅ תלמיד זוהה</h2>
+  <div class="student-card">
+    <div class="student-name" id="conf-name"></div>
+    <div class="student-class" id="conf-class"></div>
   </div>
+  <button class="btn-confirm" onclick="confirmStudent()">✓ אישור — עבור לסריקת ספרים</button>
+  <button class="btn-rescan" onclick="rescanStudent()">🔄 סרוק שוב</button>
+</div>
 
-  <canvas id="canvas"></canvas>
+<!-- סריקת ספרים -->
+<div id="books-screen">
+  <div class="student-mini" id="books-student-name"></div>
+  <h2>📚 סרוק ספרים</h2>
+  <div class="sub">כוון לקוד QR של כל ספר</div>
+  <div class="video-wrap">
+    <video id="video2" autoplay muted playsinline></video>
+    <div class="scan-line"></div>
+    <div class="c tl"></div><div class="c tr"></div>
+    <div class="c bl"></div><div class="c br"></div>
+  </div>
+  <div class="status" id="books-status">מחפש קוד QR...</div>
+  <div class="books-scanned" id="books-list"></div>
+  <button class="btn-finish" onclick="showFinish()">✓ סיום סריקת ספרים</button>
+  <button class="btn-close-scan" onclick="window.close()">✕ סגור</button>
+</div>
+
+<!-- סיום — בחר פעולה -->
+<div id="finish-screen">
+  <div class="student-mini" id="finish-student-name"></div>
+  <h2>📋 בחר פעולה</h2>
+  <div class="finish-list" id="finish-list"></div>
+  <div class="action-btns">
+    <button class="btn-action btn-borrow" onclick="sendAction('השאלה')">📥 השאלה</button>
+    <button class="btn-action btn-return" onclick="sendAction('החזרה')">📤 החזרה</button>
+  </div>
+  <button class="btn-rescan" style="margin-top:4px;" onclick="window.close()">✕ סגור</button>
+</div>
+
+<!-- שגיאה -->
+<div id="error">
+  <div style="font-size:52px">📵</div>
+  <div style="font-size:18px;font-weight:800;color:#e03131;">לא ניתן לגשת למצלמה</div>
+  <div style="font-size:13px;color:rgba(255,255,255,0.5);" id="err-msg"></div>
+  <button class="btn" onclick="location.reload()">🔄 נסה שוב</button>
+</div>
+
+<canvas id="canvas"></canvas>
 
 <script>
-  var params   = new URLSearchParams(window.location.search);
-  var GAS_URL  = params.get('gas') || '';
-  var SESSION  = params.get('sid') || '';
-  // מילון מזהה → שם ספר (מועבר מ-Index)
+  var params  = new URLSearchParams(window.location.search);
+  var GAS_URL = params.get('gas') || '';
+  var SESSION = params.get('sid') || '';
   var idToBook = {};
-  try { idToBook = JSON.parse(decodeURIComponent(params.get('ids') || '{}')); } catch(e) {}
+  var idToStudent = {}; // { tz: { fullName, classGroup } }
 
-  var video   = document.getElementById('video');
-  var canvas  = document.getElementById('canvas');
-  var ctx     = canvas.getContext('2d');
-  var scanned = false;
+  try {
+    idToBook    = JSON.parse(decodeURIComponent(params.get('ids')      || '{}'));
+    idToStudent = JSON.parse(decodeURIComponent(params.get('students') || '{}'));
+  } catch(e) {}
 
-  navigator.mediaDevices.getUserMedia({
-    video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
-  })
-  .then(function(stream) {
-    video.srcObject = stream;
-    video.play();
-    document.getElementById('status').textContent = '🔍 מחפש קוד QR...';
-    startScanning();
-  })
-  .catch(function(err) {
-    document.getElementById('scan-screen').style.display = 'none';
-    document.getElementById('err-msg').textContent = err.message;
-    document.getElementById('error').style.display = 'flex';
-  });
-
-  // סריקה מהירה: כל 100ms + requestAnimationFrame לזיהוי מהיר
+  var canvas   = document.getElementById('canvas');
+  var ctx      = canvas.getContext('2d');
+  var scanned  = false;
   var scanTimer = null;
+  var currentStudent = null;
+  var scannedBooks   = []; // [{ id, name }]
+  var mode = 'student'; // 'student' | 'books'
 
-  function startScanning() {
-    if (scanTimer) clearInterval(scanTimer);
-    scanTimer = setInterval(function() {
-      if (scanned) { clearInterval(scanTimer); return; }
-      if (video.readyState !== video.HAVE_ENOUGH_DATA) return;
+  // פתח מצלמה ראשונה (לתלמיד)
+  startCamera('video', function(code) { onStudentScanned(code); });
 
-      // סרוק ברזולוציה מלאה
-      canvas.width  = video.videoWidth;
-      canvas.height = video.videoHeight;
-      ctx.drawImage(video, 0, 0);
-      var img  = ctx.getImageData(0, 0, canvas.width, canvas.height);
-
-      // נסה זיהוי רגיל
-      var code = jsQR(img.data, img.width, img.height, { inversionAttempts: 'dontInvert' });
-
-      // אם לא נמצא — נסה גם חצי רזולוציה (מהיר יותר)
-      if (!code) {
-        var hw = Math.floor(canvas.width / 2);
-        var hh = Math.floor(canvas.height / 2);
-        var small = document.createElement('canvas');
-        small.width = hw; small.height = hh;
-        small.getContext('2d').drawImage(canvas, 0, 0, hw, hh);
-        var imgS = small.getContext('2d').getImageData(0, 0, hw, hh);
-        code = jsQR(imgS.data, imgS.width, imgS.height, { inversionAttempts: 'attemptBoth' });
-      }
-
-      if (code && code.data) {
-        scanned = true;
-        clearInterval(scanTimer);
-        video.srcObject.getTracks().forEach(function(t){ t.stop(); });
-        // נרמל רווחים — הסר רווחים כפולים ורווחים בקצוות
-        var bookName = code.data.replace(/\s+/g, ' ').trim();
-        onScanned(bookName);
-      }
-    }, 100);
+  function startCamera(videoId, onScan) {
+    var video = document.getElementById(videoId);
+    navigator.mediaDevices.getUserMedia({
+      video: { facingMode:{ ideal:'environment' }, width:{ ideal:1280 }, height:{ ideal:720 } }
+    })
+    .then(function(stream) {
+      video.srcObject = stream;
+      video.play();
+      document.getElementById('status').textContent = '🔍 מחפש קוד QR של תלמיד...';
+      if (scanTimer) clearInterval(scanTimer);
+      scanTimer = setInterval(function() {
+        if (video.readyState !== video.HAVE_ENOUGH_DATA) return;
+        canvas.width  = video.videoWidth;
+        canvas.height = video.videoHeight;
+        ctx.drawImage(video, 0, 0);
+        var img  = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        var code = jsQR(img.data, img.width, img.height, { inversionAttempts:'dontInvert' })
+                || jsQR(img.data, img.width, img.height, { inversionAttempts:'invertFirst' });
+        if (code && code.data) {
+          onScan(code.data.trim());
+        }
+      }, 150);
+    })
+    .catch(function(err) {
+      document.getElementById('scan-screen').style.display = 'none';
+      document.getElementById('err-msg').textContent = err.message;
+      document.getElementById('error').style.display = 'flex';
+    });
   }
 
-  function tick() { startScanning(); }
-
-  function beep() {
-    try {
-      var ctx2 = new (window.AudioContext || window.webkitAudioContext)();
-      var osc  = ctx2.createOscillator();
-      var gain = ctx2.createGain();
-      osc.connect(gain); gain.connect(ctx2.destination);
-      osc.frequency.value = 880; osc.type = 'sine';
-      gain.gain.setValueAtTime(0.3, ctx2.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx2.currentTime + 0.2);
-      osc.start(ctx2.currentTime); osc.stop(ctx2.currentTime + 0.2);
-    } catch(e) {}
+  function stopCamera(videoId) {
+    var video = document.getElementById(videoId);
+    if (video && video.srcObject) video.srcObject.getTracks().forEach(function(t){ t.stop(); });
+    if (scanTimer) { clearInterval(scanTimer); scanTimer = null; }
   }
 
-  function onScanned(book) {
+  // ── סריקת תלמיד ──
+  function onStudentScanned(code) {
+    // בדוק אם זה ת.ז (מספר)
+    var student = idToStudent[code];
+    if (!student) {
+      // נסה חיפוש חלקי
+      document.getElementById('status').textContent = '⚠️ קוד לא מזוהה כתלמיד: ' + code;
+      return;
+    }
     beep();
+    stopCamera('video');
+    if (scanTimer) { clearInterval(scanTimer); scanTimer = null; }
+
+    currentStudent = { id: code, fullName: student.fullName, classGroup: student.classGroup };
+    document.getElementById('conf-name').textContent  = student.fullName;
+    document.getElementById('conf-class').textContent = 'כיתה: ' + student.classGroup;
+    document.getElementById('scan-screen').style.display = 'none';
+    document.getElementById('student-confirm').style.display = 'flex';
+  }
+
+  function confirmStudent() {
+    document.getElementById('student-confirm').style.display = 'none';
+    document.getElementById('books-student-name').textContent = currentStudent.fullName + ' | ' + currentStudent.classGroup;
+    document.getElementById('finish-student-name').textContent = currentStudent.fullName + ' | ' + currentStudent.classGroup;
+    document.getElementById('books-screen').style.display = 'flex';
+    scannedBooks = [];
+    renderBooksList();
+    // פתח מצלמה שנייה לספרים
+    startBooksCamera();
+  }
+
+  function rescanStudent() {
+    document.getElementById('student-confirm').style.display = 'none';
+    document.getElementById('scan-screen').style.display = 'flex';
+    currentStudent = null;
+    startCamera('video', function(code) { onStudentScanned(code); });
+  }
+
+  // ── סריקת ספרים ──
+  function startBooksCamera() {
+    var video2 = document.getElementById('video2');
+    navigator.mediaDevices.getUserMedia({
+      video: { facingMode:{ ideal:'environment' }, width:{ ideal:1280 }, height:{ ideal:720 } }
+    })
+    .then(function(stream) {
+      video2.srcObject = stream;
+      video2.play();
+      document.getElementById('books-status').textContent = '🔍 מחפש קוד QR של ספר...';
+      if (scanTimer) clearInterval(scanTimer);
+      scanTimer = setInterval(function() {
+        if (video2.readyState !== video2.HAVE_ENOUGH_DATA) return;
+        canvas.width  = video2.videoWidth;
+        canvas.height = video2.videoHeight;
+        ctx.drawImage(video2, 0, 0);
+        var img  = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        var code = jsQR(img.data, img.width, img.height, { inversionAttempts:'dontInvert' })
+                || jsQR(img.data, img.width, img.height, { inversionAttempts:'invertFirst' });
+        if (code && code.data) { onBookScanned(code.data.trim()); }
+      }, 150);
+    })
+    .catch(function(err) {
+      document.getElementById('books-status').textContent = '❌ שגיאת מצלמה: ' + err.message;
+    });
+  }
+
+  function onBookScanned(code) {
+    var bookName = idToBook[code] || code;
+    // מנע כפילויות
+    if (scannedBooks.some(function(b){ return b.id === code; })) {
+      document.getElementById('books-status').textContent = '⚠️ ' + bookName + ' — כבר נסרק';
+      return;
+    }
+    beep();
+    scannedBooks.push({ id: code, name: bookName });
+    renderBooksList();
+    document.getElementById('books-status').textContent = '✅ ' + bookName + ' נוסף';
+    setTimeout(function() {
+      document.getElementById('books-status').textContent = '🔍 מחפש קוד QR של ספר...';
+    }, 1500);
+  }
+
+  function renderBooksList() {
+    var list = document.getElementById('books-list');
+    list.innerHTML = '';
+    scannedBooks.forEach(function(b, i) {
+      var tag = document.createElement('div');
+      tag.className = 'book-tag';
+      tag.innerHTML = '<span class="num">' + (i+1) + '</span>' + b.name;
+      list.appendChild(tag);
+    });
+  }
+
+  // ── סיום ──
+  function showFinish() {
+    if (!scannedBooks.length) {
+      document.getElementById('books-status').textContent = '⚠️ סרוק לפחות ספר אחד';
+      return;
+    }
+    stopCamera('video2');
+    var list = document.getElementById('finish-list');
+    list.innerHTML = scannedBooks.map(function(b,i) {
+      return '<div class="finish-item">' + (i+1) + '. ' + b.name + '</div>';
+    }).join('');
+    document.getElementById('books-screen').style.display = 'none';
+    document.getElementById('finish-screen').style.display = 'flex';
+  }
+
+  function sendAction(action) {
+    if (!currentStudent || !scannedBooks.length) return;
 
     // שלח לשרת
     if (GAS_URL && SESSION) {
-      var url = GAS_URL + '?action=scan&sid=' + encodeURIComponent(SESSION) + '&book=' + encodeURIComponent(book);
-      fetch(url, { method:'GET', mode:'no-cors' }).catch(function(){ new Image().src = url; });
+      var payload = {
+        studentId:    currentStudent.id,
+        studentName:  currentStudent.fullName,
+        classGroup:   currentStudent.classGroup,
+        books:        scannedBooks.map(function(b){ return b.name; }),
+        action:       action
+      };
+      var url = GAS_URL + '?action=bulkScan&sid=' + encodeURIComponent(SESSION)
+              + '&data=' + encodeURIComponent(JSON.stringify(payload));
+      fetch(url, { method:'GET', mode:'no-cors' }).catch(function(){});
     }
 
-    // נסה postMessage
+    // שלח postMessage לחלון הפותח
     try {
       if (window.opener && !window.opener.closed) {
-        window.opener.postMessage({ type:'QR_SCANNED', book: book }, '*');
+        window.opener.postMessage({
+          type:    'BULK_SCAN',
+          student: currentStudent,
+          books:   scannedBooks.map(function(b){ return b.name; }),
+          action:  action
+        }, '*');
       }
     } catch(e) {}
 
-    // הצג הצלחה ועבור אוטומטית לסריקה הבאה
-    document.getElementById('scan-screen').style.display = 'none';
-    var bookDisplay = idToBook[book] || book;
-    document.getElementById('book-display').textContent  = bookDisplay;
-    document.getElementById('success').style.display     = 'flex';
-    setTimeout(function() { scanAgain(); }, 1500);
+    // מסך תודה וסגור
+    document.getElementById('finish-screen').style.display = 'none';
+    document.body.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100dvh;gap:16px;text-align:center;">'
+      + '<div style="font-size:64px">✅</div>'
+      + '<div style="font-size:20px;font-weight:800;">' + action + ' נרשמה!</div>'
+      + '<div style="font-size:14px;color:rgba(255,255,255,0.6);">' + scannedBooks.length + ' ספרים עבור ' + currentStudent.fullName + '</div>'
+      + '<div style="font-size:13px;color:rgba(255,255,255,0.4);">החלון ייסגר...</div>'
+      + '</div>';
+    setTimeout(function(){ window.close(); }, 2000);
   }
 
-  function scanAgain() {
-    scanned = false;
-    if (scanTimer) { clearInterval(scanTimer); scanTimer = null; }
-    document.getElementById('success').style.display    = 'none';
-    document.getElementById('scan-screen').style.display = 'flex';
-    navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
-    }).then(function(stream) {
-      video.srcObject = stream;
-      video.play();
-      document.getElementById('status').textContent = '🔍 מחפש קוד QR...';
-      startScanning();
-    });
+  function beep() {
+    try {
+      var ac  = new (window.AudioContext || window.webkitAudioContext)();
+      var osc = ac.createOscillator();
+      var g   = ac.createGain();
+      osc.connect(g); g.connect(ac.destination);
+      osc.frequency.value = 880; osc.type = 'sine';
+      g.gain.setValueAtTime(0.3, ac.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.2);
+      osc.start(ac.currentTime); osc.stop(ac.currentTime + 0.2);
+    } catch(e) {}
   }
 </script>
 </body>
