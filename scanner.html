@@ -136,22 +136,35 @@
 
   var cv  = document.getElementById('cv');
 
-  // טען תלמידים מהשרת ואז פתח מצלמה
+  // טען תלמידים דרך script tag (עוקף CORS)
   function init() {
     if (GAS_URL && SESSION) {
       document.getElementById('st1').textContent = '⏳ טוען נתוני תלמידים...';
-      fetch(GAS_URL + '?action=getStudents&sid=' + encodeURIComponent(SESSION))
-        .then(function(r){ return r.json(); })
-        .then(function(d){
-          idToStudent = d || {};
-          var count = Object.keys(idToStudent).length;
-          document.getElementById('st1').textContent = '✅ ' + count + ' תלמידים נטענו';
-          setTimeout(startStudentScan, 500);
-        })
-        .catch(function(err){
-          document.getElementById('st1').textContent = '⚠️ שגיאת טעינה — ' + err.message;
-          setTimeout(startStudentScan, 1000);
-        });
+
+      window._onStudentsLoaded = function(data) {
+        idToStudent = data || {};
+        var count = Object.keys(idToStudent).length;
+        document.getElementById('st1').textContent = '✅ ' + count + ' תלמידים נטענו';
+        setTimeout(startStudentScan, 300);
+      };
+
+      var url = GAS_URL + '?action=getStudents&sid=' + encodeURIComponent(SESSION)
+              + '&callback=_onStudentsLoaded';
+      var s = document.createElement('script');
+      s.src = url;
+      s.onerror = function() {
+        document.getElementById('st1').textContent = '⚠️ שגיאה — מתחיל ללא תלמידים';
+        setTimeout(startStudentScan, 500);
+      };
+      document.head.appendChild(s);
+
+      // timeout — אם לא הגיע תוך 5 שניות
+      setTimeout(function() {
+        if (Object.keys(idToStudent).length === 0) {
+          document.getElementById('st1').textContent = '⚠️ timeout — מתחיל ללא תלמידים';
+          startStudentScan();
+        }
+      }, 5000);
     } else {
       startStudentScan();
     }
