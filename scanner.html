@@ -201,9 +201,10 @@
         ctx.drawImage(v,0,0);
         var img = ctx.getImageData(0,0,cv.width,cv.height);
         var code = jsQR(img.data,img.width,img.height,{inversionAttempts:'dontInvert'})
-                || jsQR(img.data,img.width,img.height,{inversionAttempts:'invertFirst'});
+                || jsQR(img.data,img.width,img.height,{inversionAttempts:'invertFirst'})
+                || jsQR(img.data,img.width,img.height,{inversionAttempts:'attemptBoth'});
         if(code&&code.data) onCode(code.data.trim());
-      }, 150);
+      }, 80);
     })
     .catch(function(err){
       document.getElementById('errmsg').textContent = err.message;
