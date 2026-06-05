@@ -73,7 +73,14 @@
   var ctx     = canvas.getContext('2d');
   var scanned = false;
 
-  navigator.mediaDevices.getUserMedia({ video:{ facingMode:{ideal:'environment'} } })
+  navigator.mediaDevices.getUserMedia({
+    video: {
+      facingMode: { ideal: 'environment' },
+      width:  { ideal: 1920 },
+      height: { ideal: 1080 },
+      focusMode: 'continuous'
+    }
+  })
     .then(function(stream) {
       video.srcObject = stream;
       video.play();
@@ -92,8 +99,12 @@
       canvas.width  = video.videoWidth;
       canvas.height = video.videoHeight;
       ctx.drawImage(video, 0, 0);
-      var img  = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      var code = jsQR(img.data, img.width, img.height, { inversionAttempts:'dontInvert' });
+      var img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+      // נסה שני מצבים — רגיל והפוך
+      var code = jsQR(img.data, img.width, img.height, { inversionAttempts: 'dontInvert' })
+              || jsQR(img.data, img.width, img.height, { inversionAttempts: 'invertFirst' });
+
       if (code && code.data) {
         scanned = true;
         video.srcObject.getTracks().forEach(function(t){ t.stop(); });
@@ -155,7 +166,14 @@
     document.getElementById('success').style.display = 'none';
     document.getElementById('scan-screen').style.display = 'flex';
     // פתח מצלמה מחדש
-    navigator.mediaDevices.getUserMedia({ video:{ facingMode:{ideal:'environment'} } })
+    navigator.mediaDevices.getUserMedia({
+    video: {
+      facingMode: { ideal: 'environment' },
+      width:  { ideal: 1920 },
+      height: { ideal: 1080 },
+      focusMode: 'continuous'
+    }
+  })
       .then(function(stream) {
         video.srcObject = stream;
         video.play();
