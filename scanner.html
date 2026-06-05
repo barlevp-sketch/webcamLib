@@ -136,17 +136,21 @@
 <canvas id="cv"></canvas>
 
 <script>
-  // ── נתונים מ-sessionStorage ──
   var params  = new URLSearchParams(window.location.search);
   var SESSION = params.get('sid') || '';
-  var GAS_URL = '', idToBook = {}, idToStudent = {};
+  var GAS_URL = params.get('gas') || '';
+  var idToBook    = {};
+  var idToStudent = {};
+
+  // קרא נתונים מחלון הפותח ישירות
   try {
-    var src = (window.opener && !window.opener.closed)
-              ? window.opener.sessionStorage : sessionStorage;
-    GAS_URL     = src.getItem('lib_gas')      || '';
-    idToBook    = JSON.parse(src.getItem('lib_ids')      || '{}');
-    idToStudent = JSON.parse(src.getItem('lib_students') || '{}');
-    if (!SESSION) SESSION = src.getItem('lib_sid') || '';
+    if (window.opener && !window.opener.closed && window.opener.LIB_DATA) {
+      var d = window.opener.LIB_DATA;
+      GAS_URL     = d.gas      || GAS_URL;
+      idToBook    = d.ids      || {};
+      idToStudent = d.students || {};
+      SESSION     = d.sid      || SESSION;
+    }
   } catch(e) {}
 
   var cv  = document.getElementById('cv');
