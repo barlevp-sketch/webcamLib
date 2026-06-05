@@ -228,7 +228,8 @@
   function onStudentCode(code) {
     var s = idToStudent[code];
     if(!s){
-      document.getElementById('st1').textContent = '⚠️ לא זוהה ('+code+') — נסה שוב';
+      var cnt = Object.keys(idToStudent).length;
+      document.getElementById('st1').textContent = '⚠️ לא זוהה ('+code+') | '+cnt+' תלמידים בזיכרון';
       return;
     }
     beep();
