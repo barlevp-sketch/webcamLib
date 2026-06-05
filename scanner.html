@@ -84,7 +84,7 @@
     video.srcObject = stream;
     video.play();
     document.getElementById('status').textContent = '🔍 מחפש קוד QR...';
-    requestAnimationFrame(tick);
+    startScanning();
   })
   .catch(function(err) {
     document.getElementById('scan-screen').style.display = 'none';
@@ -92,24 +92,45 @@
     document.getElementById('error').style.display = 'flex';
   });
 
-  function tick() {
-    if (scanned) return;
-    if (video.readyState === video.HAVE_ENOUGH_DATA) {
+  // סריקה מהירה: כל 100ms + requestAnimationFrame לזיהוי מהיר
+  var scanTimer = null;
+
+  function startScanning() {
+    if (scanTimer) clearInterval(scanTimer);
+    scanTimer = setInterval(function() {
+      if (scanned) { clearInterval(scanTimer); return; }
+      if (video.readyState !== video.HAVE_ENOUGH_DATA) return;
+
+      // סרוק ברזולוציה מלאה
       canvas.width  = video.videoWidth;
       canvas.height = video.videoHeight;
       ctx.drawImage(video, 0, 0);
       var img  = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      var code = jsQR(img.data, img.width, img.height, { inversionAttempts: 'dontInvert' })
-              || jsQR(img.data, img.width, img.height, { inversionAttempts: 'invertFirst' });
+
+      // נסה זיהוי רגיל
+      var code = jsQR(img.data, img.width, img.height, { inversionAttempts: 'dontInvert' });
+
+      // אם לא נמצא — נסה גם חצי רזולוציה (מהיר יותר)
+      if (!code) {
+        var hw = Math.floor(canvas.width / 2);
+        var hh = Math.floor(canvas.height / 2);
+        var small = document.createElement('canvas');
+        small.width = hw; small.height = hh;
+        small.getContext('2d').drawImage(canvas, 0, 0, hw, hh);
+        var imgS = small.getContext('2d').getImageData(0, 0, hw, hh);
+        code = jsQR(imgS.data, imgS.width, imgS.height, { inversionAttempts: 'attemptBoth' });
+      }
+
       if (code && code.data) {
         scanned = true;
+        clearInterval(scanTimer);
         video.srcObject.getTracks().forEach(function(t){ t.stop(); });
         onScanned(code.data.trim());
-        return;
       }
-    }
-    requestAnimationFrame(tick);
+    }, 100);
   }
+
+  function tick() { startScanning(); }
 
   function beep() {
     try {
@@ -149,6 +170,7 @@
 
   function scanAgain() {
     scanned = false;
+    if (scanTimer) { clearInterval(scanTimer); scanTimer = null; }
     document.getElementById('success').style.display    = 'none';
     document.getElementById('scan-screen').style.display = 'flex';
     navigator.mediaDevices.getUserMedia({
@@ -157,7 +179,7 @@
       video.srcObject = stream;
       video.play();
       document.getElementById('status').textContent = '🔍 מחפש קוד QR...';
-      requestAnimationFrame(tick);
+      startScanning();
     });
   }
 </script>
