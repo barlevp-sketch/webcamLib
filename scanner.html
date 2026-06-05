@@ -68,9 +68,12 @@
   <canvas id="canvas"></canvas>
 
 <script>
-  var params  = new URLSearchParams(window.location.search);
-  var GAS_URL = params.get('gas') || '';
-  var SESSION = params.get('sid') || '';
+  var params   = new URLSearchParams(window.location.search);
+  var GAS_URL  = params.get('gas') || '';
+  var SESSION  = params.get('sid') || '';
+  // מילון מזהה → שם ספר (מועבר מ-Index)
+  var idToBook = {};
+  try { idToBook = JSON.parse(decodeURIComponent(params.get('ids') || '{}')); } catch(e) {}
 
   var video   = document.getElementById('video');
   var canvas  = document.getElementById('canvas');
@@ -125,7 +128,9 @@
         scanned = true;
         clearInterval(scanTimer);
         video.srcObject.getTracks().forEach(function(t){ t.stop(); });
-        onScanned(code.data.trim());
+        // נרמל רווחים — הסר רווחים כפולים ורווחים בקצוות
+        var bookName = code.data.replace(/\s+/g, ' ').trim();
+        onScanned(bookName);
       }
     }, 100);
   }
@@ -163,7 +168,8 @@
 
     // הצג הצלחה ועבור אוטומטית לסריקה הבאה
     document.getElementById('scan-screen').style.display = 'none';
-    document.getElementById('book-display').textContent  = book;
+    var bookDisplay = idToBook[book] || book;
+    document.getElementById('book-display').textContent  = bookDisplay;
     document.getElementById('success').style.display     = 'flex';
     setTimeout(function() { scanAgain(); }, 1500);
   }
