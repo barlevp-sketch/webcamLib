@@ -141,15 +141,23 @@
   var GAS_URL = params.get('gas') || '';
   var idToBook    = {};
   var idToStudent = {};
+  var dataReady   = false;
 
-  // קרא נתונים מחלון הפותח ישירות
+  // בקש נתונים מחלון הפותח דרך postMessage
+  window.addEventListener('message', function(e) {
+    if (e.data && e.data.type === 'LIB_DATA') {
+      GAS_URL     = e.data.gas      || GAS_URL;
+      SESSION     = e.data.sid      || SESSION;
+      idToBook    = e.data.ids      || {};
+      idToStudent = e.data.students || {};
+      dataReady   = true;
+    }
+  });
+
+  // שלח בקשה לחלון הפותח
   try {
-    if (window.opener && !window.opener.closed && window.opener.LIB_DATA) {
-      var d = window.opener.LIB_DATA;
-      GAS_URL     = d.gas      || GAS_URL;
-      idToBook    = d.ids      || {};
-      idToStudent = d.students || {};
-      SESSION     = d.sid      || SESSION;
+    if (window.opener && !window.opener.closed) {
+      window.opener.postMessage({ type: 'SCANNER_READY' }, '*');
     }
   } catch(e) {}
 
@@ -181,10 +189,7 @@
     })
     .then(function(stream){
       v.srcObject = stream; v.play();
-      var studentCount = Object.keys(idToStudent).length;
-      var bookCount    = Object.keys(idToBook).length;
-      document.getElementById(statusId).textContent =
-        '🔍 מחפש QR... (' + studentCount + ' תלמידים, ' + bookCount + ' ספרים)';
+      document.getElementById(statusId).textContent = '🔍 מחפש קוד QR...';
       timer = setInterval(function(){
         if(v.readyState < 2) return;
         cv.width=v.videoWidth; cv.height=v.videoHeight;
@@ -217,7 +222,12 @@
   startCam('v1','st1', function(code){
     var s = idToStudent[code];
     if(!s){
-      document.getElementById('st1').textContent = '⚠️ לא זוהה כתלמיד — נסה שוב';
+      // אם הנתונים עוד לא הגיעו — המתן
+      if(Object.keys(idToStudent).length === 0) {
+        document.getElementById('st1').textContent = '⏳ טוען נתונים... נסה שוב';
+      } else {
+        document.getElementById('st1').textContent = '⚠️ לא זוהה כתלמיד ('+code+')';
+      }
       return;
     }
     beep();
