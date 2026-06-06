@@ -100,6 +100,7 @@
     <div class="c bl"></div><div class="c br"></div>
   </div>
   <div class="status" id="st3">מחפש...</div>
+  <div style="font-size:13px;font-weight:700;color:#0ca678;min-height:18px;" id="book-counter"></div>
   <div class="blist" id="blist"></div>
   <button class="btn btn-blue"  onclick="goFinish()">✓ סיום סריקת ספרים</button>
   <button class="btn btn-gray"  onclick="window.close()">✕ סגור</button>
@@ -311,11 +312,25 @@
 
   function renderBooks() {
     var l = document.getElementById('blist'); l.innerHTML='';
-    scannedBooks.forEach(function(b,i){
+
+    // מיון לפי א-ב
+    var sorted = scannedBooks.slice().sort(function(a,b){
+      return a.name.localeCompare(b.name, 'he');
+    });
+
+    sorted.forEach(function(b, i){
       var t = document.createElement('div'); t.className='btag';
       t.innerHTML='<span class="bnum">'+(i+1)+'</span>'+b.name;
       l.appendChild(t);
     });
+
+    // עדכן סופר
+    var counter = document.getElementById('book-counter');
+    if (counter) {
+      counter.textContent = scannedBooks.length > 0
+        ? scannedBooks.length + ' ספרים נסרקו'
+        : '';
+    }
   }
 
   // ── שלב 3: סיום ──
