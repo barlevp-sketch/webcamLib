@@ -144,29 +144,6 @@
   var scannedBooks = [];
   var lastCode     = '';    // מניעת כפילויות מהירות
 
-  // ── מצב Mini: סריקת קוד בודד לחלון הפותח ──
-  var MODE = params.get('mode') || 'full';
-  if (MODE === 'mini') {
-    document.getElementById('s1').querySelector('h2').textContent = '📷 סרוק ברקוד / QR';
-    document.getElementById('s1').querySelector('.sub').textContent = 'כוון לברקוד או QR על הספר';
-    startScan('v1', 'st1', function(code) {
-      beep();
-      try {
-        if (window.opener && !window.opener.closed) {
-          window.opener.postMessage({ type:'QR_SCANNED', book:code, code:code, sid:SESSION }, '*');
-        }
-      } catch(e) {}
-      document.body.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100dvh;gap:14px;text-align:center;padding:20px;background:#0f172a;color:#fff;">'
-        + '<div style="font-size:50px">✅</div>'
-        + '<div style="font-size:18px;font-weight:800;">זוהה!</div>'
-        + '<div style="font-size:14px;color:rgba(255,255,255,0.6);">'+code+'</div>'
-        + '<div style="font-size:12px;color:rgba(255,255,255,0.35);">החלון ייסגר...</div>'
-        + '</div>';
-      setTimeout(function(){ window.close(); }, 1500);
-    });
-    return; // לא ממשיך לטעינת תלמידים
-  }
-
   // טען תלמידים מהשרת (JSONP)
   function init() {
     if (GAS_URL) {
@@ -395,8 +372,28 @@
     setTimeout(function(){ window.close(); }, 2000);
   }
 
-  // התחל
-  init();
+  // ── מצב Mini: סריקת קוד בודד ──
+  var MODE = params.get('mode') || 'full';
+  if (MODE === 'mini') {
+    document.getElementById('s1').querySelector('h2').textContent = '📷 סרוק ברקוד / QR';
+    document.getElementById('s1').querySelector('.sub').textContent = 'כוון לברקוד או QR על הספר';
+    startScan('v1', 'st1', function(code) {
+      beep(); stopScan();
+      try {
+        if (window.opener && !window.opener.closed) {
+          window.opener.postMessage({ type:'QR_SCANNED', book:code, code:code, sid:SESSION }, '*');
+        }
+      } catch(e) {}
+      document.body.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100dvh;gap:14px;text-align:center;padding:20px;background:#0f172a;color:#fff;">'
+        + '<div style="font-size:50px">✅</div>'
+        + '<div style="font-size:18px;font-weight:800;">זוהה!</div>'
+        + '<div style="font-size:14px;color:rgba(255,255,255,0.6);">'+code+'</div>'
+        + '</div>';
+      setTimeout(function(){ window.close(); }, 1500);
+    });
+  } else {
+    init();
+  }
 </script>
 </body>
 </html>
