@@ -5,39 +5,22 @@
   <title>סורק כרטיסים למסיבת סיום</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
   <style>
-    body { font-family: 'Segoe UI', system-ui, sans-serif; margin: 0; padding: 0; background-color: #121212; color: #ffffff; text-align: center; }
-    .container { max-width: 500px; margin: 0 auto; padding: 15px; }
+    body { font-family: 'Segoe UI', system-ui, sans-serif; margin: 0; padding: 15px; background-color: #121212; color: #ffffff; text-align: center; }
+    .container { max-width: 500px; margin: 0 auto; }
     h1 { font-size: 22px; margin-bottom: 5px; color: #3c78d8; }
     p { margin-top: 0; color: #aaa; font-size: 14px; }
     #reader { width: 100%; background: #1e1e1e; border-radius: 12px; overflow: hidden; border: 2px solid #333; }
     #reader button { background-color: #3c78d8; color: white; border: none; padding: 12px 20px; font-size: 16px; font-weight: bold; border-radius: 8px; margin: 10px 0; cursor: pointer; width: 80%; }
-
-    /* כרטיס תוצאה — מכסה את כל המסך */
-    .result-card {
-      display: none;
-      position: fixed;
-      inset: 0;
-      z-index: 999;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      padding: 30px 20px;
-      animation: fadeIn 0.2s ease;
-    }
-    .result-card.show { display: flex; }
-    .success { background-color: #1b5e20; }
-    .warning { background-color: #b84500; }
-    .error   { background-color: #7f1010; }
-
-    .result-title { font-size: 28px; font-weight: 900; margin-bottom: 24px; line-height: 1.3; }
-    .student-name { font-size: 42px; font-weight: 900; margin-bottom: 8px; letter-spacing: -1px; }
-    .details { text-align: center; background: rgba(0,0,0,0.25); padding: 16px 24px; border-radius: 12px; max-width: 340px; width: 100%; }
-    .details div { margin-bottom: 8px; font-size: 18px; }
-    .tap-hint { margin-top: 30px; font-size: 14px; opacity: 0.5; }
-
+    .result-card { margin-top: 20px; padding: 20px; border-radius: 12px; display: none; animation: fadeIn 0.2s ease; }
+    .success { background-color: #1b5e20; border: 2px solid #4caf50; }
+    .warning { background-color: #e65100; border: 2px solid #ff9800; }
+    .error   { background-color: #b71c1c; border: 2px solid #f44336; }
+    .result-title { font-size: 20px; font-weight: bold; margin-bottom: 10px; }
+    .details { text-align: right; background: rgba(0,0,0,0.2); padding: 12px; border-radius: 8px; }
+    .details div { margin-bottom: 6px; font-size: 16px; }
     #loading { display: none; font-size: 18px; color: #ffeb3b; margin-top: 15px; }
     #cacheStatus { font-size: 11px; color: #555; margin-top: 6px; }
-    @keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
+    @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
   </style>
 </head>
 <body>
@@ -47,11 +30,9 @@
   <div id="cacheStatus">⏳ טוען כרטיסים לזיכרון...</div>
   <div id="reader"></div>
   <div id="loading">⏳ בודק...</div>
-  <div id="resultCard" class="result-card" onclick="dismissResult()">
+  <div id="resultCard" class="result-card">
     <div id="resultTitle" class="result-title"></div>
-    <div id="resultName" class="student-name"></div>
     <div id="resultDetails" class="details"></div>
-    <div class="tap-hint">הקש לסריקה הבאה</div>
   </div>
 </div>
 
@@ -62,7 +43,6 @@
   let cacheReady   = false;
   let isProcessing = false;
 
-  // פרסור בטוח של תגובת גוגל (מנקה undefined עודף אם יש)
   function parseGAS(text) {
     let t = text.trim();
     if (t.startsWith('undefined(')) t = t.substring(10, t.length - 2);
@@ -88,7 +68,7 @@
         el.style.color = '#4caf50';
         el.textContent = '✅ ' + Object.keys(ticketCache).length + ' כרטיסים נטענו לזיכרון';
       })
-      .catch(err => {
+      .catch(() => {
         const el = document.getElementById('cacheStatus');
         el.style.color = '#f44336';
         el.textContent = '⚠️ זיכרון לא נטען — עובד ישירות מול שרת';
@@ -105,7 +85,6 @@
     let ticketId = decodedText.includes('id=') ? decodedText.split('id=')[1] : decodedText.trim();
 
     if (cacheReady && ticketCache.hasOwnProperty(ticketId)) {
-      // ===== בדיקה מקומית מיידית — ללא loading =====
       const t = ticketCache[ticketId];
       if (t.used) {
         showResult({ status: 'warning', message: '⚠️ אזהרה: כרטיס זה כבר נוצל!',
@@ -115,16 +94,12 @@
         t.time = new Date().toLocaleTimeString('he-IL');
         showResult({ status: 'success', message: '✅ הכניסה אושרה! תהנו במסיבה.',
           details: { name: t.name, class: t.cls, num: t.num } });
-        // עדכון שרת ברקע — לא מחכים לו
         gasGet('action=markUsed&id=' + encodeURIComponent(ticketId)).catch(() => {});
       }
-
     } else {
-      // ===== fallback: לא במטמון — פנייה לשרת =====
       document.getElementById('loading').style.display = 'block';
       gasGet('id=' + encodeURIComponent(ticketId))
         .then(response => {
-          // מוסיף לזיכרון לסריקה הבאה
           if (response.details) {
             ticketCache[ticketId] = {
               name: response.details.name,
@@ -144,43 +119,33 @@
     document.getElementById('loading').style.display = 'none';
     const card    = document.getElementById('resultCard');
     const title   = document.getElementById('resultTitle');
-    const nameEl  = document.getElementById('resultName');
     const details = document.getElementById('resultDetails');
-
-    card.className = 'result-card ' + response.status + ' show';
+    card.className = 'result-card ' + response.status;
     title.innerText = response.message;
-
     if (response.details && response.status !== 'error') {
-      nameEl.innerText = response.details.name || '';
-      nameEl.style.display = 'block';
-      let html = '<div>כיתה ' + response.details.class + ' &nbsp;|&nbsp; כרטיס ' + response.details.num + '</div>';
+      let html = '<div><b>תלמיד/ה:</b> ' + response.details.name + '</div>' +
+                 '<div><b>כיתה:</b> ' + response.details.class + '</div>' +
+                 '<div><b>מספר כרטיס:</b> ' + response.details.num + '</div>';
       if (response.details.time)
-        html += '<div style="color:#ffc107;font-weight:bold;margin-top:6px;">⏰ נסרק כבר ב: ' + response.details.time + '</div>';
+        html += '<div style="color:#ffc107;font-weight:bold;">⏰ נסרק כבר ב: ' + response.details.time + '</div>';
       details.innerHTML = html;
       details.style.display = 'block';
     } else {
-      nameEl.style.display = 'none';
       details.style.display = 'none';
     }
-
-    // סגירה אוטומטית אחרי 3 שניות
-    setTimeout(() => { dismissResult(); }, 3000);
-  }
-
-  function dismissResult() {
-    const card = document.getElementById('resultCard');
-    card.className = 'result-card';
-    isProcessing = false;
+    card.style.display = 'block';
+    setTimeout(() => { isProcessing = false; }, 3500);
   }
 
   function showError() {
+    isProcessing = false;
     document.getElementById('loading').style.display = 'none';
     const card = document.getElementById('resultCard');
-    card.className = 'result-card error show';
-    document.getElementById('resultTitle').innerText = '❌ כרטיס לא נמצא או קוד שגוי';
-    document.getElementById('resultName').style.display = 'none';
+    card.className = 'result-card error';
+    document.getElementById('resultTitle').innerText = '❌ שגיאה: כרטיס לא נמצא או קוד שגוי.';
     document.getElementById('resultDetails').style.display = 'none';
-    setTimeout(() => { dismissResult(); }, 2500);
+    card.style.display = 'block';
+    setTimeout(() => { isProcessing = false; }, 2500);
   }
 
   // ===== אתחול =====
