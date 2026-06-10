@@ -47,7 +47,7 @@
   <div id="cacheStatus">⏳ טוען כרטיסים לזיכרון...</div>
   <div id="reader"></div>
   <div id="loading">⏳ בודק...</div>
-  <div id="resultCard" class="result-card" onclick="dismissResult()">
+  <div id="resultCard" class="result-card">
     <div id="resultTitle" class="result-title"></div>
     <div id="resultName" class="student-name"></div>
     <div id="resultDetails" class="details"></div>
@@ -163,13 +163,20 @@
       details.style.display = 'none';
     }
 
-    // סגירה אוטומטית אחרי 3 שניות
-    setTimeout(() => { dismissResult(); }, 4000);
+    // מאפשר הקשה לסגירה רק אחרי שנייה (מונע סגירה מיידית מה-QR scan)
+    let autoClose = setTimeout(() => { dismissResult(); }, 4000);
+    setTimeout(() => {
+      document.getElementById('resultCard').onclick = function() {
+        clearTimeout(autoClose);
+        dismissResult();
+      };
+    }, 1000);
   }
 
   function dismissResult() {
     const card = document.getElementById('resultCard');
     card.className = 'result-card';
+    card.onclick = null;
     isProcessing = false;
   }
 
