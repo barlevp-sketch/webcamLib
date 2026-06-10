@@ -45,7 +45,6 @@
 </div>
 
 <script>
-  // 🔔 הדבק כאן את קישור ה-Web App החדש שלך (זה שמסתיים ב-/exec)
   const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyHU9LTYc6-A-qcBrBvXpRDaFF_W1k3eEgn27GBxxjoS_VcfVzawujsz2Xprvo5ZT4/exec";
 
   let html5QrcodeScanner;
@@ -63,16 +62,16 @@
       ticketId = decodedText.split('id=')[1];
     }
 
-    // פנייה לשרת וניקוי טקסטים עודפים (כמו undefined) בצורה חכמה
-    fetch(`${GOOGLE_SCRIPT_URL}?id=${encodeURIComponent(ticketId)}`)
+    fetch(`${GOOGLE_SCRIPT_URL}?id=${encodeURIComponent(ticketId)}`, {
+      redirect: 'follow',
+      mode: 'cors'
+    })
     .then(res => res.text())
     .then(text => {
-      // מנקה את ה-undefined ואת הסוגריים אם גוגל מוסיפה אותם בטעות
       let cleanText = text;
       if (text.startsWith('undefined(')) {
         cleanText = text.substring(10, text.length - 2);
       }
-      
       const response = JSON.parse(cleanText);
       showResult(response);
     })
@@ -121,7 +120,10 @@
   html5QrcodeScanner = new Html5QrcodeScanner("reader", { 
     fps: 10, 
     qrbox: { width: 250, height: 250 },
-    rememberLastUsedCamera: true
+    rememberLastUsedCamera: true,
+    videoConstraints: {
+      facingMode: { exact: "environment" }
+    }
   });
   html5QrcodeScanner.render(onScanSuccess);
 </script>
