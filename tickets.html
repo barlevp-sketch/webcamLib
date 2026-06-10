@@ -152,7 +152,7 @@
     }
     card.style.display = 'block';
     if (hideTimer) clearTimeout(hideTimer);
-    hideTimer = setTimeout(hideResult, 4000);
+    hideTimer = setTimeout(hideResult, 3000);
   }
 
   function showError() {
@@ -176,7 +176,7 @@
 
   loadCache();
   // סנכרון סטטוס קל משקל כל 15 שניות
-  setInterval(syncStatusOnly, 120000);
+  setInterval(syncStatusOnly, 30000);
 </script>
 </body>
 </html>
