@@ -85,7 +85,7 @@
     if (isProcessing) return;
     isProcessing = true;
 
-    document.getElementById('loading').style.display = 'block';
+    // loading רק בפנייה לשרת
     document.getElementById('resultCard').style.display = 'none';
 
     let ticketId = decodedText.includes('id=')
@@ -117,6 +117,7 @@
       }
     } else {
       // ===== לא במטמון — פנייה לשרת =====
+      document.getElementById('loading').style.display = 'block';
       google.script.run
         .withSuccessHandler(function(response) {
           // אם נמצא, מוסיף למטמון
@@ -125,7 +126,7 @@
               name: response.details.name,
               cls: response.details.class,
               num: response.details.num,
-              used: response.status !== 'success' ? true : true,
+              used: response.status === 'success',
               time: response.details.time || null
             };
           }
