@@ -102,7 +102,7 @@
 
     let ticketId = decodedText.includes('id=') ? decodedText.split('id=')[1] : decodedText.trim();
 
-    // בדיקה מהירה: אם הזיכרון יודע שכבר נוצל — חסום מיד ללא פנייה לשרת
+    // כרטיס ידוע כנוצל — חסום מיד
     if (cacheReady && ticketCache.hasOwnProperty(ticketId) && ticketCache[ticketId].used) {
       const t = ticketCache[ticketId];
       showResult({
@@ -113,8 +113,25 @@
       return;
     }
 
-    // בדיקת סנכרון: תמיד מוודא מול השרת לפני אישור
-    // (מונע מצב שמכשיר שני סרק את הכרטיס מאז טעינת ה-cache)
+    // כרטיס נמצא בזיכרון כ"פנוי" — אשר מיידית ועדכן שרת ברקע
+    if (cacheReady && ticketCache.hasOwnProperty(ticketId) && !ticketCache[ticketId].used) {
+      const t = ticketCache[ticketId];
+      t.used = true;
+      t.time = new Date().toLocaleTimeString('he-IL');
+      showResult({
+        status: 'success',
+        message: '✅ הכניסה אושרה! תהנו במסיבה.',
+        details: { name: t.name, class: t.cls, num: t.num }
+      });
+      // עדכון שרת ברקע — אם נכשל, מחזיר מצב
+      gasGet('action=markUsed&id=' + encodeURIComponent(ticketId)).catch(() => {
+        t.used = false;
+        t.time = null;
+      });
+      return;
+    }
+
+    // כרטיס לא בזיכרון — פנייה לשרת
     document.getElementById('loading').style.display = 'block';
     gasGet('id=' + encodeURIComponent(ticketId))
       .then(response => {
