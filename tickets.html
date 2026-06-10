@@ -62,6 +62,7 @@
       .then(text => parseGAS(text));
   }
 
+  // טעינה מלאה — בהתחלה בלבד
   function loadCache() {
     gasGet('action=getTicketsWithStatus')
       .then(tickets => {
@@ -79,6 +80,19 @@
         el.style.color = '#f44336';
         el.textContent = '⚠️ זיכרון לא נטען — עובד ישירות מול שרת';
       });
+  }
+
+  // סנכרון רקע קל משקל — רק סטטוסים (קוד:true/false)
+  function syncStatusOnly() {
+    gasGet('action=getStatusOnly')
+      .then(statusMap => {
+        Object.keys(statusMap).forEach(code => {
+          if (ticketCache[code]) {
+            ticketCache[code].used = statusMap[code];
+          }
+        });
+      })
+      .catch(() => {}); // שגיאת סנכרון רקע — לא מציגים למשתמש
   }
 
   function onScanSuccess(decodedText) {
@@ -161,8 +175,8 @@
   }).render(onScanSuccess);
 
   loadCache();
-  // רענון זיכרון כל 30 שניות לסנכרון בין מכשירים
-  setInterval(loadCache, 30000);
+  // סנכרון סטטוס קל משקל כל 15 שניות
+  setInterval(syncStatusOnly, 15000);
 </script>
 </body>
 </html>
