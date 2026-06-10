@@ -15,11 +15,11 @@
     .success { background-color: #1b5e20; border: 2px solid #4caf50; }
     .warning { background-color: #e65100; border: 2px solid #ff9800; }
     .error   { background-color: #b71c1c; border: 2px solid #f44336; }
-    .result-title { font-size: 36px; font-weight: 900; margin-bottom: 14px; }
+    .result-title { font-size: 45px; font-weight: 900; margin-bottom: 14px; }
     .details { text-align: right; background: rgba(0,0,0,0.2); padding: 12px; border-radius: 8px; }
-    .details div { margin-bottom: 10px; font-size: 32px; font-weight: 600; }
+    .details div { margin-bottom: 10px; font-size: 45px; font-weight: 600; }
     #loading { display: none; font-size: 18px; color: #ffeb3b; margin-top: 15px; }
-    #cacheStatus { font-size: 11px; color: #555; margin-top: 6px; }
+    #cacheStatus { font-size: 18px; color: #555; margin-top: 6px; font-weight: 600; }
     @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
   </style>
 </head>
@@ -91,8 +91,19 @@
             ticketCache[code].used = statusMap[code];
           }
         });
+        // עדכון אינדיקטור סנכרון
+        const el = document.getElementById('cacheStatus');
+        const now = new Date().toLocaleTimeString('he-IL', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+        const total = Object.keys(ticketCache).length;
+        const used  = Object.values(ticketCache).filter(t => t.used).length;
+        el.style.color = '#4caf50';
+        el.textContent = '✅ ' + total + ' כרטיסים | נוצלו: ' + used + ' | עודכן ' + now;
       })
-      .catch(() => {}); // שגיאת סנכרון רקע — לא מציגים למשתמש
+      .catch(() => {
+        const el = document.getElementById('cacheStatus');
+        el.style.color = '#f44336';
+        el.textContent = '⚠️ סנכרון נכשל — ' + new Date().toLocaleTimeString('he-IL');
+      });
   }
 
   function onScanSuccess(decodedText) {
