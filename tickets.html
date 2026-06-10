@@ -19,7 +19,7 @@
     p { margin-top: 0; color: #aaa; font-size: 14px; }
     #reader { width: 100%; background: #1e1e1e; border-radius: 12px; overflow: hidden; border: 2px solid #333; }
     #reader button { background-color: #3c78d8; color: white; border: none; padding: 12px 20px; font-size: 16px; font-weight: bold; border-radius: 8px; margin: 10px 0; cursor: pointer; width: 80%; }
-    .result-card { margin-top: 20px; padding: 20px; border-radius: 12px; display: none; }
+    .result-card { margin-top: 20px; padding: 20px; border-radius: 12px; display: none; animation: fadeIn 0.2s ease; }
     .success { background-color: #1b5e20; border: 2px solid #4caf50; }
     .warning { background-color: #e65100; border: 2px solid #ff9800; }
     .error { background-color: #b71c1c; border: 2px solid #f44336; }
@@ -27,6 +27,8 @@
     .details { text-align: right; background: rgba(0,0,0,0.2); padding: 12px; border-radius: 8px; }
     .details div { margin-bottom: 6px; font-size: 16px; }
     #loading { display: none; font-size: 18px; color: #ffeb3b; margin-top: 15px; }
+    #cacheStatus { font-size: 11px; color: #555; margin-top: 6px; }
+    @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
   </style>
 </head>
 <body>
@@ -34,9 +36,10 @@
 <div class="container">
   <h1>בקרת כניסה למסיבת סיום</h1>
   <p>אנא פתח מצלמה וסרוק את ה-QR שבידי ההורה</p>
+  <div id="cacheStatus">⏳ טוען כרטיסים לזיכרון...</div>
   
   <div id="reader"></div>
-  <div id="loading">⏳ בודק נתונים בגיליון, אנא המתן...</div>
+  <div id="loading">⏳ בודק...</div>
   
   <div id="resultCard" class="result-card">
     <div id="resultTitle" class="result-title"></div>
@@ -45,39 +48,92 @@
 </div>
 
 <script>
-  const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyHU9LTYc6-A-qcBrBvXpRDaFF_W1k3eEgn27GBxxjoS_VcfVzawujsz2Xprvo5ZT4/exec";
-
-  let html5QrcodeScanner;
+  let ticketCache = {};      // זיכרון מקומי: code -> { name, cls, num, used, time }
+  let cacheReady = false;
   let isProcessing = false;
+  let html5QrcodeScanner;
 
+  // ===== טעינת כל הכרטיסים לזיכרון =====
+  function loadCache() {
+    google.script.run
+      .withSuccessHandler(function(tickets) {
+        ticketCache = {};
+        tickets.forEach(function(t) {
+          ticketCache[t.code] = {
+            name: t.name,
+            cls: t.cls,
+            num: t.num,
+            used: t.used || false,
+            time: t.time || null
+          };
+        });
+        cacheReady = true;
+        var count = Object.keys(ticketCache).length;
+        document.getElementById('cacheStatus').style.color = '#4caf50';
+        document.getElementById('cacheStatus').textContent = '✅ ' + count + ' כרטיסים נטענו לזיכרון';
+      })
+      .withFailureHandler(function(err) {
+        document.getElementById('cacheStatus').style.color = '#f44336';
+        document.getElementById('cacheStatus').textContent = '⚠️ לא ניתן לטעון זיכרון — יעבוד עם שרת';
+        cacheReady = false;
+      })
+      .getAllTicketsWithStatus();
+  }
+
+  // ===== סריקה =====
   function onScanSuccess(decodedText) {
     if (isProcessing) return;
     isProcessing = true;
-    
+
     document.getElementById('loading').style.display = 'block';
     document.getElementById('resultCard').style.display = 'none';
-    
-    let ticketId = decodedText;
-    if (decodedText.includes('id=')) {
-      ticketId = decodedText.split('id=')[1];
-    }
 
-    fetch(`${GOOGLE_SCRIPT_URL}?id=${encodeURIComponent(ticketId)}`, {
-      redirect: 'follow',
-      mode: 'cors'
-    })
-    .then(res => res.text())
-    .then(text => {
-      let cleanText = text;
-      if (text.startsWith('undefined(')) {
-        cleanText = text.substring(10, text.length - 2);
+    let ticketId = decodedText.includes('id=')
+      ? decodedText.split('id=')[1]
+      : decodedText.trim();
+
+    if (cacheReady && ticketCache[ticketId] !== undefined) {
+      // ===== בדיקה מקומית מיידית =====
+      const t = ticketCache[ticketId];
+
+      if (t.used) {
+        // כבר נוצל — מציג אזהרה מיד
+        showResult({
+          status: "warning",
+          message: "⚠️ אזהרה: כרטיס זה כבר נוצל!",
+          details: { name: t.name, class: t.cls, num: t.num, time: t.time }
+        });
+      } else {
+        // תקין — מסמן מקומית ומציג מיד
+        t.used = true;
+        t.time = new Date().toLocaleTimeString('he-IL');
+        showResult({
+          status: "success",
+          message: "✅ הכניסה אושרה! תהנו במסיבה.",
+          details: { name: t.name, class: t.cls, num: t.num }
+        });
+        // עדכון השרת ברקע — לא מחכים
+        google.script.run.markTicketUsed(ticketId);
       }
-      const response = JSON.parse(cleanText);
-      showResult(response);
-    })
-    .catch(err => {
-      showError();
-    });
+    } else {
+      // ===== לא במטמון — פנייה לשרת =====
+      google.script.run
+        .withSuccessHandler(function(response) {
+          // אם נמצא, מוסיף למטמון
+          if (response.details) {
+            ticketCache[ticketId] = {
+              name: response.details.name,
+              cls: response.details.class,
+              num: response.details.num,
+              used: response.status !== 'success' ? true : true,
+              time: response.details.time || null
+            };
+          }
+          showResult(response);
+        })
+        .withFailureHandler(showError)
+        .checkTicket(ticketId);
+    }
   }
 
   function showResult(response) {
@@ -85,25 +141,25 @@
     const card = document.getElementById('resultCard');
     const title = document.getElementById('resultTitle');
     const details = document.getElementById('resultDetails');
-    
+
     card.className = "result-card " + response.status;
     title.innerText = response.message;
-    
+
     if (response.details && response.status !== "error") {
-      let html = `<div><b>תלמיד/ה:</b> ${response.details.name}</div>
-                  <div><b>כיתה:</b> ${response.details.class}</div>
-                  <div><b>מספר כרטיס:</b> ${response.details.num}</div>`;
+      let html = '<div><b>תלמיד/ה:</b> ' + response.details.name + '</div>' +
+                 '<div><b>כיתה:</b> ' + response.details.class + '</div>' +
+                 '<div><b>מספר כרטיס:</b> ' + response.details.num + '</div>';
       if (response.details.time) {
-        html += `<div style="color: #ffeb3b; font-weight: bold; margin-top: 5px;">⏰ נסרק כבר ב: ${response.details.time}</div>`;
+        html += '<div style="color:#ffc107;font-weight:bold;">⏰ נסרק כבר ב: ' + response.details.time + '</div>';
       }
       details.innerHTML = html;
       details.style.display = 'block';
     } else {
       details.style.display = 'none';
     }
+
     card.style.display = 'block';
-    
-    setTimeout(() => { isProcessing = false; }, 3500);
+    setTimeout(function() { isProcessing = false; }, 2000);
   }
 
   function showError() {
@@ -111,21 +167,24 @@
     document.getElementById('loading').style.display = 'none';
     const card = document.getElementById('resultCard');
     card.className = "result-card error";
-    document.getElementById('resultTitle').innerText = "❌ שגיאה: כרטיס לא נמצא במערכת או קוד שגוי.";
+    document.getElementById('resultTitle').innerText = "❌ שגיאה: כרטיס לא נמצא או קוד שגוי.";
     document.getElementById('resultDetails').style.display = 'none';
     card.style.display = 'block';
-    setTimeout(() => { isProcessing = false; }, 3500);
+    setTimeout(function() { isProcessing = false; }, 2500);
   }
 
-  html5QrcodeScanner = new Html5QrcodeScanner("reader", { 
-    fps: 10, 
-    qrbox: { width: 250, height: 250 },
+  // ===== אתחול =====
+  html5QrcodeScanner = new Html5QrcodeScanner("reader", {
+    fps: 15,
+    qrbox: { width: 200, height: 200 },
     rememberLastUsedCamera: true,
-    videoConstraints: {
-      facingMode: { exact: "environment" }
-    }
+    aspectRatio: 1.0,
+    videoConstraints: { facingMode: { ideal: "environment" } }
   });
   html5QrcodeScanner.render(onScanSuccess);
+
+  // טעינת cache בהתחלה
+  loadCache();
 </script>
 
 </body>
