@@ -1,182 +1,666 @@
-<!DOCTYPE html>
-<html lang="he" dir="rtl">
-<head>
-  <meta charset="UTF-8">
-  <title>סורק כרטיסים למסיבת סיום</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
-  <style>
-    body { font-family: 'Segoe UI', system-ui, sans-serif; margin: 0; padding: 15px; background-color: #121212; color: #ffffff; text-align: center; }
-    .container { max-width: 500px; margin: 0 auto; }
-    h1 { font-size: 22px; margin-bottom: 5px; color: #3c78d8; }
-    p { margin-top: 0; color: #aaa; font-size: 14px; }
-    #reader { width: 100%; background: #1e1e1e; border-radius: 12px; overflow: hidden; border: 2px solid #333; }
-    #reader button { background-color: #3c78d8; color: white; border: none; padding: 12px 20px; font-size: 16px; font-weight: bold; border-radius: 8px; margin: 10px 0; cursor: pointer; width: 80%; }
-    .result-card { margin-top: 20px; padding: 20px; border-radius: 12px; display: none; animation: fadeIn 0.2s ease; }
-    .success { background-color: #1b5e20; border: 2px solid #4caf50; }
-    .warning { background-color: #e65100; border: 2px solid #ff9800; }
-    .error   { background-color: #b71c1c; border: 2px solid #f44336; }
-    .result-title { font-size: 36px; font-weight: 900; margin-bottom: 14px; }
-    .details { text-align: right; background: rgba(0,0,0,0.2); padding: 12px; border-radius: 8px; }
-    .details div { margin-bottom: 10px; font-size: 32px; font-weight: 600; }
-    #loading { display: none; font-size: 18px; color: #ffeb3b; margin-top: 15px; }
-    #cacheStatus { font-size: 11px; color: #555; margin-top: 6px; }
-    @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
-  </style>
-</head>
-<body>
-<div class="container">
-  <h1>בקרת כניסה למסיבת סיום</h1>
-  <p>אנא פתח מצלמה וסרוק את ה-QR שבידי ההורה</p>
-  <div id="cacheStatus">⏳ טוען כרטיסים לזיכרון...</div>
-  <div id="reader"></div>
-  <div id="loading">⏳ בודק...</div>
-  <div id="resultCard" class="result-card">
-    <div id="resultTitle" class="result-title"></div>
-    <div id="resultDetails" class="details"></div>
-  </div>
-</div>
+// ===================================================
+// משתנים גלובליים
+// ===================================================
+var SHEET_NAME_TICKETS   = 'כרטיסים';
+var SHEET_NAME_STUDENTS  = 'תלמידים';
+var SHEET_NAME_EXTRA     = 'כרטיסים נוספים';
+var CACHE_KEY_TICKETS    = 'tickets_data_v1';
+var CACHE_KEY_STUDENTS   = 'students_list_v2';
+var EMAIL_COL_PARENT1    = 12;  // עמודה L
+var EMAIL_COL_PARENT2    = 16;  // עמודה P
 
-<script>
-  const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyHU9LTYc6-A-qcBrBvXpRDaFF_W1k3eEgn27GBxxjoS_VcfVzawujsz2Xprvo5ZT4/exec";
+// ===================================================
+// MENU
+// ===================================================
+function onOpen() {
+  SpreadsheetApp.getUi()
+    .createMenu('🎟️ כרטיסים')
+    .addItem('🖨️ הדפסת כרטיסים', 'openPrintInterface')
+    .addItem('📄 יצירת HTML להדפסה', 'generateTicketsHTML')
+    .addSeparator()
+    .addItem('📧 שליחת כרטיסים במייל', 'sendTicketEmails')
+    .addItem('➕ כרטיסים נוספים', 'openExtraTickets')
+    .addSeparator()
+    .addItem('🔄 איפוס מערכת', 'resetSystem')
+    .addToUi();
+}
 
-  let ticketCache  = {};
-  let cacheReady   = false;
-  let isProcessing = false;
-  let hideTimer    = null;
+function openExtraTickets() {
+  var html = HtmlService.createHtmlOutputFromFile('extra-tickets')
+    .setWidth(700)
+    .setHeight(550);
+  SpreadsheetApp.getUi().showModalDialog(html, '➕ יצירת כרטיסים נוספים');
+}
 
-  function hideResult() {
-    if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
-    document.getElementById('resultCard').style.display = 'none';
-    isProcessing = false;
-  }
+function openPrintInterface() {
+  var html = HtmlService.createHtmlOutputFromFile('print-tickets')
+    .setWidth(900)
+    .setHeight(650);
+  SpreadsheetApp.getUi().showModalDialog(html, '🎟️ הדפסת כרטיסי כניסה');
+}
 
-  function parseGAS(text) {
-    let t = text.trim();
-    if (t.startsWith('undefined(')) t = t.substring(10, t.length - 2);
-    return JSON.parse(t);
-  }
 
-  function gasGet(params) {
-    return fetch(SCRIPT_URL + '?' + params, { redirect: 'follow', mode: 'cors' })
-      .then(r => r.text())
-      .then(text => parseGAS(text));
-  }
+// ===================================================
+// onEdit — סנכרון סטטוס מגיליון כרטיסים לכרטיסים נוספים
+// כשמשתנה עמודה F (זמן כניסה) בגיליון כרטיסים
+// ואם הקוד בעמודה D מתחיל ב-EXTRA או GEN
+// מעדכן את E ו-F בגיליון כרטיסים נוספים
+// ===================================================
+// onEdit — לשינויים ידניים בגיליון
+function onEdit(e) {
+  var sheet = e.range.getSheet();
+  if (sheet.getName() !== SHEET_NAME_TICKETS) return;
+  var col = e.range.getColumn();
+  var row = e.range.getRow();
+  if (row < 2 || (col !== 5 && col !== 6)) return; // עמודה E או F
+  var code = String(sheet.getRange(row, 4).getValue()).trim();
+  if (!code) return;
+  if (!code.startsWith('EXTRA-') && !code.startsWith('GEN-')) return;
+  var status = sheet.getRange(row, 5).getValue();
+  var time   = sheet.getRange(row, 6).getValue();
+  syncExtraStatus(code, status, time);
+}
 
-  // טעינה מלאה — בהתחלה בלבד
-  function loadCache() {
-    gasGet('action=getTicketsWithStatus')
-      .then(tickets => {
-        ticketCache = {};
-        tickets.forEach(t => {
-          ticketCache[t.code] = { name: t.name, cls: t.cls, num: t.num, used: !!t.used, time: t.time || null };
-        });
-        cacheReady = true;
-        const el = document.getElementById('cacheStatus');
-        el.style.color = '#4caf50';
-        el.textContent = '✅ ' + Object.keys(ticketCache).length + ' כרטיסים נטענו לזיכרון';
-      })
-      .catch(() => {
-        const el = document.getElementById('cacheStatus');
-        el.style.color = '#f44336';
-        el.textContent = '⚠️ זיכרון לא נטען — עובד ישירות מול שרת';
-      });
-  }
-
-  // סנכרון רקע קל משקל — רק סטטוסים (קוד:true/false)
-  function syncStatusOnly() {
-    gasGet('action=getStatusOnly')
-      .then(statusMap => {
-        Object.keys(statusMap).forEach(code => {
-          if (ticketCache[code]) {
-            ticketCache[code].used = statusMap[code];
-          }
-        });
-      })
-      .catch(() => {}); // שגיאת סנכרון רקע — לא מציגים למשתמש
-  }
-
-  function onScanSuccess(decodedText) {
-    if (isProcessing) return;
-    isProcessing = true;
-    document.getElementById('resultCard').style.display = 'none';
-
-    let ticketId = decodedText.includes('id=') ? decodedText.split('id=')[1] : decodedText.trim();
-
-    // בדיקה מהירה: אם הזיכרון יודע שכבר נוצל — חסום מיד ללא פנייה לשרת
-    if (cacheReady && ticketCache.hasOwnProperty(ticketId) && ticketCache[ticketId].used) {
-      const t = ticketCache[ticketId];
-      showResult({
-        status: 'warning',
-        message: '⚠️ אזהרה: כרטיס זה כבר נוצל!',
-        details: { name: t.name, class: t.cls, num: t.num, time: t.time }
-      });
-      return;
+// syncExtraStatus — מסנכרן סטטוס לגיליון כרטיסים נוספים
+// נקרא גם מ-markTicketUsed וגם מ-onEdit
+function syncExtraStatus(code, status, time) {
+  if (!code.startsWith('EXTRA-') && !code.startsWith('GEN-')) return;
+  var extraSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME_EXTRA);
+  if (!extraSheet) return;
+  var data = extraSheet.getDataRange().getValues();
+  for (var i = 1; i < data.length; i++) {
+    if (String(data[i][3]).trim() === String(code).trim()) {
+      extraSheet.getRange(i + 1, 5).setValue(status);
+      extraSheet.getRange(i + 1, 6).setValue(time);
+      break;
     }
+  }
+}
 
-    // בדיקת סנכרון: תמיד מוודא מול השרת לפני אישור
-    // (מונע מצב שמכשיר שני סרק את הכרטיס מאז טעינת ה-cache)
-    document.getElementById('loading').style.display = 'block';
-    gasGet('id=' + encodeURIComponent(ticketId))
-      .then(response => {
-        if (response.details) {
-          ticketCache[ticketId] = {
-            name: response.details.name,
-            cls:  response.details.class,
-            num:  response.details.num,
-            used: response.status === 'success' || response.status === 'warning',
-            time: response.details.time || null
+// ===================================================
+// RESET SYSTEM
+// ===================================================
+function resetSystem() {
+  var ui = SpreadsheetApp.getUi();
+  var msg = 'האם אתה בטוח?\n\n' +
+    '• כל כרטיסי "כרטיסים" יסומנו כ"טרם נוצל"\n' +
+    '• גיליון "כרטיסים נוספים" יימחק לחלוטין\n' +
+    '• זמני הכניסה יימחקו\n\n' +
+    'פעולה זו אינה הפיכה!';
+  var confirm = ui.alert('🔄 איפוס מערכת', msg, ui.ButtonSet.YES_NO);
+
+  if (confirm !== ui.Button.YES) return;
+
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  // 1. איפוס גיליון כרטיסים — עמודות E (סטטוס) ו-F (זמן)
+  var ticketSheet = ss.getSheetByName(SHEET_NAME_TICKETS);
+  if (ticketSheet) {
+    var lastRow = ticketSheet.getLastRow();
+    if (lastRow > 1) {
+      // מחיקת עמודת סטטוס וזמן
+      ticketSheet.getRange(2, 5, lastRow - 1, 1).setValue('טרם נוצל');
+      ticketSheet.getRange(2, 6, lastRow - 1, 1).clearContent();
+    }
+  }
+
+  // 2. מחיקת שורות EXTRA/GEN מגיליון כרטיסים
+  if (ticketSheet) {
+    var tData = ticketSheet.getDataRange().getValues();
+    // עוברים מהסוף למעלה כדי לא לדפוק אינדקסים
+    for (var i = tData.length - 1; i >= 1; i--) {
+      var tCode = String(tData[i][3]).trim();
+      if (tCode.startsWith('EXTRA-') || tCode.startsWith('GEN-')) {
+        ticketSheet.deleteRow(i + 1);
+      }
+    }
+  }
+
+  // 3. מחיקת גיליון כרטיסים נוספים
+  var extraSheet = ss.getSheetByName(SHEET_NAME_EXTRA);
+  if (extraSheet) {
+    ss.deleteSheet(extraSheet);
+  }
+
+  // 4. ניקוי cache
+  invalidateCache();
+
+  ui.alert('✅ האיפוס הושלם בהצלחה!');
+}
+
+// ===================================================
+// doGet — Web App endpoint
+// ===================================================
+function doGet(e) {
+  var action = e.parameter.action;
+
+  if (action === 'getTicketsWithStatus') {
+    return ContentService.createTextOutput(JSON.stringify(getAllTicketsWithStatus()))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  if (action === 'markUsed') {
+    markTicketUsed(e.parameter.id);
+    return ContentService.createTextOutput(JSON.stringify({ ok: true }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  if (action === 'getTickets') {
+    return ContentService.createTextOutput(JSON.stringify(getAllTickets()))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  if (action === 'getStatusOnly') {
+    return ContentService.createTextOutput(JSON.stringify(getStatusMap()))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  var ticketId = e.parameter.id;
+  var result = checkTicket(ticketId);
+  return ContentService.createTextOutput(JSON.stringify(result))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+// ===================================================
+// CACHE helpers
+// ===================================================
+var SCRIPT_CACHE_KEY = 'tickets_data_v1';
+
+function getSheetData() {
+  var cache = CacheService.getScriptCache();
+  var cached = cache.get(CACHE_KEY_TICKETS);
+  if (cached) {
+    return JSON.parse(cached);
+  }
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME_TICKETS);
+  var data = sheet.getDataRange().getValues();
+  try { cache.put(CACHE_KEY_TICKETS, JSON.stringify(data), 21600); } catch(e) {}
+  return data;
+}
+
+function invalidateCache() {
+  var cache = CacheService.getScriptCache();
+  cache.remove(CACHE_KEY_TICKETS);
+  cache.remove(CACHE_KEY_STUDENTS);
+  cache.remove('status_map_v1');
+}
+
+// ===================================================
+// getAllTickets — לממשק ההדפסה
+// ===================================================
+function getAllTickets() {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME_TICKETS);
+  var data = sheet.getDataRange().getValues();
+  var tickets = [];
+  for (var i = 1; i < data.length; i++) {
+    var name = data[i][0], cls = data[i][1], num = data[i][2], code = data[i][3];
+    if (!name || !code) continue;
+    tickets.push({ name: String(name), cls: String(cls), num: String(num), code: String(code) });
+  }
+  return tickets;
+}
+
+// ===================================================
+// getStatusMap — סנכרון רקע קל משקל (קוד:סטטוס בלבד)
+// ===================================================
+function getStatusMap() {
+  var cache = CacheService.getScriptCache();
+  var cached = cache.get('status_map_v1');
+  if (cached) return JSON.parse(cached);
+
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheets = [ss.getSheetByName(SHEET_NAME_TICKETS), ss.getSheetByName(SHEET_NAME_EXTRA)];
+  var map = {};
+  for (var s = 0; s < sheets.length; s++) {
+    var sheet = sheets[s];
+    if (!sheet) continue;
+    var data = sheet.getDataRange().getValues();
+    for (var i = 1; i < data.length; i++) {
+      var code = String(data[i][3] || '').trim();
+      if (!code) continue;
+      map[code] = (data[i][4] === 'נוצל');
+    }
+  }
+  try { cache.put('status_map_v1', JSON.stringify(map), 60); } catch(e) {}
+  return map;
+}
+
+// ===================================================
+// getAllTicketsWithStatus — לסורק (כולל סטטוס נוצל)
+// ===================================================
+function getAllTicketsWithStatus() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheets = [ss.getSheetByName(SHEET_NAME_TICKETS), ss.getSheetByName(SHEET_NAME_EXTRA)];
+  var tickets = [];
+  for (var s = 0; s < sheets.length; s++) {
+    var sheet = sheets[s];
+    if (!sheet) continue;
+    var data = sheet.getDataRange().getValues();
+    for (var i = 1; i < data.length; i++) {
+      var name = data[i][0], cls = data[i][1], num = data[i][2], code = data[i][3];
+      var status = data[i][4], timeVal = data[i][5];
+      if (!name || !code) continue;
+      var timeStr = null;
+      if (status === 'נוצל' && timeVal) {
+        try { timeStr = Utilities.formatDate(new Date(timeVal), 'GMT+3', 'HH:mm:ss (dd/MM)'); } catch(e) {}
+      }
+      tickets.push({
+        name: String(name), cls: String(cls), num: String(num),
+        code: String(code), used: status === 'נוצל', time: timeStr
+      });
+    }
+  }
+  return tickets;
+}
+
+// ===================================================
+// markTicketUsed — עדכון ברקע (מהיר, ללא החזרת ערך)
+// ===================================================
+function markTicketUsed(ticketId) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheets = [ss.getSheetByName(SHEET_NAME_TICKETS), ss.getSheetByName(SHEET_NAME_EXTRA)];
+  var now = new Date();
+  // עובר על כל הגיליונות ומעדכן בכולם
+  for (var s = 0; s < sheets.length; s++) {
+    var sheet = sheets[s];
+    if (!sheet) continue;
+    var data = sheet.getDataRange().getValues();
+    // בניית אינדקס מהיר: קוד → שורה
+    var idx = {};
+    for (var r = 1; r < data.length; r++) {
+      var c = String(data[r][3] || '').trim();
+      if (c) idx[c] = r;
+    }
+    if (!idx.hasOwnProperty(ticketId)) continue;
+    { var i = idx[ticketId];
+      if (true) {
+        sheet.getRange(i + 1, 5).setValue('נוצל');
+        sheet.getRange(i + 1, 6).setValue(now);
+        // סנכרון לגיליון נוספים אם מדובר בכרטיס EXTRA/GEN
+        if (sheet.getName() === SHEET_NAME_TICKETS) {
+          syncExtraStatus(ticketId, 'נוצל', now);
+        }
+        break;
+      }
+    }
+  }
+  invalidateCache();
+}
+
+// ===================================================
+// checkTicket — בדיקה מלאה (fallback כשאין cache מקומי)
+// ===================================================
+function checkTicket(ticketId) {
+  if (!ticketId) return { status: 'error', message: 'קוד כרטיס לא תקין' };
+
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  // חיפוש בשני הגיליונות
+  var sheetsToCheck = [
+    ss.getSheetByName(SHEET_NAME_TICKETS),
+    ss.getSheetByName(SHEET_NAME_EXTRA)
+  ];
+
+  for (var s = 0; s < sheetsToCheck.length; s++) {
+    var sheet = sheetsToCheck[s];
+    if (!sheet) continue;
+
+    var data = sheet.getDataRange().getValues();
+    // בניית אינדקס מהיר: קוד → שורה
+    var idx = {};
+    for (var r = 1; r < data.length; r++) {
+      var c = String(data[r][3] || '').trim();
+      if (c) idx[c] = r;
+    }
+    if (!idx.hasOwnProperty(ticketId)) continue;
+    { var i = idx[ticketId];
+      if (true) {
+        var studentName = data[i][0];
+        var className   = data[i][1];
+        var ticketNum   = data[i][2];
+        var status      = data[i][4];
+
+        if (status === 'נוצל') {
+          var timeUsed = '';
+          try { timeUsed = Utilities.formatDate(new Date(data[i][5]), 'GMT+3', 'HH:mm:ss (dd/MM)'); } catch(e) {}
+          return {
+            status: 'warning',
+            message: '⚠️ אזהרה: כרטיס זה כבר נוצל!',
+            details: { name: studentName, class: className, num: ticketNum, time: timeUsed }
           };
         }
-        showResult(response);
-      })
-      .catch(() => showError());
-  }
 
-  function showResult(response) {
-    document.getElementById('loading').style.display = 'none';
-    const card    = document.getElementById('resultCard');
-    const title   = document.getElementById('resultTitle');
-    const details = document.getElementById('resultDetails');
-    card.className = 'result-card ' + response.status;
-    title.innerText = response.message;
-    if (response.details && response.status !== 'error') {
-      let html = '<div><b>תלמיד/ה:</b> ' + response.details.name + '</div>' +
-                 '<div><b>כיתה:</b> ' + response.details.class + '</div>' +
-                 '<div><b>מספר כרטיס:</b> ' + response.details.num + '</div>';
-      if (response.details.time)
-        html += '<div style="color:#ffc107;font-weight:bold;">⏰ נסרק כבר ב: ' + response.details.time + '</div>';
-      details.innerHTML = html;
-      details.style.display = 'block';
-    } else {
-      details.style.display = 'none';
+        var now = new Date();
+        sheet.getRange(i + 1, 5).setValue('נוצל');
+        sheet.getRange(i + 1, 6).setValue(now);
+        // עדכון גם בגיליון השני אם הכרטיס קיים שם
+        var otherSheetName = (s === 0) ? SHEET_NAME_EXTRA : SHEET_NAME_TICKETS;
+        var otherSheet = ss.getSheetByName(otherSheetName);
+        if (otherSheet) {
+          var otherData = otherSheet.getDataRange().getValues();
+          for (var oi = 1; oi < otherData.length; oi++) {
+            if (otherData[oi][3] && otherData[oi][3].toString().trim() === ticketId.toString().trim()) {
+              otherSheet.getRange(oi + 1, 5).setValue('נוצל');
+              otherSheet.getRange(oi + 1, 6).setValue(now);
+              break;
+            }
+          }
+        }
+        invalidateCache();
+
+        return {
+          status: 'success',
+          message: '✅ הכניסה אושרה! תהנו במסיבה.',
+          details: { name: studentName, class: className, num: ticketNum }
+        };
+      }
     }
-    card.style.display = 'block';
-    if (hideTimer) clearTimeout(hideTimer);
-    hideTimer = setTimeout(hideResult, 4000);
   }
 
-  function showError() {
-    document.getElementById('loading').style.display = 'none';
-    const card = document.getElementById('resultCard');
-    card.className = 'result-card error';
-    document.getElementById('resultTitle').innerText = '❌ שגיאה: כרטיס לא נמצא או קוד שגוי.';
-    document.getElementById('resultDetails').style.display = 'none';
-    card.style.display = 'block';
-    if (hideTimer) clearTimeout(hideTimer);
-    hideTimer = setTimeout(hideResult, 3000);
+  return { status: 'error', message: '❌ הכרטיס לא נמצא במערכת!' };
+}
+
+// ===================================================
+// generateTicketsHTML — יצירת HTML ל-Drive
+// ===================================================
+function generateTicketsHTML() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(SHEET_NAME_TICKETS);
+  var data = sheet.getDataRange().getValues();
+
+  var classes = {};
+  for (var i = 1; i < data.length; i++) {
+    var name = data[i][0], cls = data[i][1], num = data[i][2], code = data[i][3];
+    if (!name || !code) continue;
+    if (!classes[cls]) classes[cls] = [];
+    classes[cls].push({ name: name, cls: cls, num: num, code: code });
   }
 
-  new Html5QrcodeScanner("reader", {
-    fps: 15,
-    qrbox: { width: 200, height: 200 },
-    rememberLastUsedCamera: true,
-    aspectRatio: 1.0,
-    videoConstraints: { facingMode: { ideal: "environment" } }
-  }).render(onScanSuccess);
+  var html = '<!DOCTYPE html><html dir="rtl" lang="he"><head><meta charset="UTF-8">' +
+    '<title>כרטיסי כניסה</title>' +
+    '<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script>' +
+    '<style>body{font-family:Arial,sans-serif;background:#f5f5f5;margin:0;padding:20px}' +
+    'h2{text-align:center;color:#3c78d8;border-bottom:2px solid #3c78d8;padding-bottom:8px}' +
+    '.page{max-width:800px;margin:0 auto}' +
+    '.grid{display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-bottom:30px}' +
+    '.ticket{background:white;border:2px solid #3c78d8;border-radius:12px;padding:15px;text-align:center;page-break-inside:avoid}' +
+    '.ticket-name{font-size:18px;font-weight:bold;margin-bottom:4px}' +
+    '.ticket-class{font-size:14px;color:#666;margin-bottom:4px}' +
+    '.ticket-num{font-size:13px;color:#999;margin-bottom:10px}' +
+    '.qr-container{display:flex;justify-content:center}' +
+    '@media print{body{background:white;padding:0}.no-print{display:none}.grid{gap:10px}}' +
+    '<\/style><\/head><body>' +
+    '<div class="no-print" style="text-align:center;margin-bottom:20px;">' +
+    '<button onclick="window.print()" style="padding:12px 30px;font-size:16px;background:#3c78d8;color:white;border:none;border-radius:8px;cursor:pointer;">🖨️ הדפס<\/button><\/div>' +
+    '<div class="page">';
 
-  loadCache();
-  // סנכרון סטטוס קל משקל כל 15 שניות
-  setInterval(syncStatusOnly, 15000);
-</script>
-</body>
-</html>
+  var ticketIndex = 0;
+  var sortedClasses = Object.keys(classes).sort();
+  var allTicketsFlat = [];
+
+  for (var c = 0; c < sortedClasses.length; c++) {
+    var cls = sortedClasses[c];
+    var tickets = classes[cls];
+    html += '<h2>כיתה ' + cls + '<\/h2><div class="grid">';
+    for (var t = 0; t < tickets.length; t++) {
+      var tk = tickets[t];
+      html += '<div class="ticket">' +
+        '<div class="ticket-name">' + tk.name + '<\/div>' +
+        '<div class="ticket-class">כיתה ' + tk.cls + '<\/div>' +
+        '<div class="ticket-num">כרטיס מס\' ' + tk.num + ' | ' + tk.code + '<\/div>' +
+        '<div class="qr-container"><div id="qr_' + ticketIndex + '"><\/div><\/div>' +
+        '<\/div>';
+      allTicketsFlat.push(tk);
+      ticketIndex++;
+    }
+    html += '<\/div>';
+  }
+
+  html += '<\/div><script>var t=' + JSON.stringify(allTicketsFlat) + ';' +
+    't.forEach(function(tk,i){new QRCode(document.getElementById("qr_"+i),{text:tk.code,width:120,height:120});});<\/script>' +
+    '<\/body><\/html>';
+
+  var file = DriveApp.createFile('tickets_output.html', html, MimeType.HTML);
+  SpreadsheetApp.getUi().alert('הקובץ נוצר ב-Google Drive:\n' + file.getName());
+}
+
+// ===================================================
+// EMAIL — שליחת כרטיסים להורים
+// עמודות: A=שם, B=כיתה, C=מספר, D=קוד, G=מייל תלמיד(7), L=הורה1(12), P=הורה2(16)
+// ===================================================
+function sendTicketEmails() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(SHEET_NAME_TICKETS);
+  var data = sheet.getDataRange().getValues();
+
+  // קיבוץ כרטיסים לפי תלמיד (לפי שם+כיתה)
+  var students = {};
+  for (var i = 1; i < data.length; i++) {
+    var name    = String(data[i][0]).trim();
+    var cls     = String(data[i][1]).trim();
+    var num     = String(data[i][2]).trim();
+    var code    = String(data[i][3]).trim();
+    var email1  = String(data[i][EMAIL_COL_PARENT1 - 1]).trim();
+    var email2  = String(data[i][EMAIL_COL_PARENT2 - 1]).trim();
+    if (!name || !code) continue;
+
+    var key = name + '|' + cls;
+    if (!students[key]) {
+      students[key] = { name: name, cls: cls, tickets: [], email1: email1, email2: email2 };
+    }
+    students[key].tickets.push({ num: num, code: code });
+  }
+
+  var sent = 0, skipped = 0, errors = 0;
+
+  Object.keys(students).forEach(function(key) {
+    var s = students[key];
+    var emails = [];
+    if (s.email1 && s.email1 !== '' && s.email1 !== 'undefined') emails.push(s.email1);
+    if (s.email2 && s.email2 !== '' && s.email2 !== 'undefined' && s.email2 !== s.email1) emails.push(s.email2);
+
+    if (emails.length === 0) { skipped++; return; }
+
+    // בניית תוכן המייל
+    var ticketRows = s.tickets.map(function(t) {
+      return '<tr><td style="padding:8px 12px;border-bottom:1px solid #eee;">כרטיס ' + t.num + '</td>' +
+             '<td style="padding:8px 12px;border-bottom:1px solid #eee;font-family:monospace;color:#3c78d8;">' + t.code + '</td></tr>';
+    }).join('');
+
+    var qrLinks = s.tickets.map(function(t) {
+      return '<p style="margin:8px 0">כרטיס ' + t.num + ': <strong>' + t.code + '</strong></p>';
+    }).join('');
+
+    var subject = 'כרטיס כניסה למסיבת הסיום — ' + s.name;
+    var body = '<div dir="rtl" style="font-family:Arial,sans-serif;max-width:500px;margin:0 auto">' +
+      '<div style="background:#3c78d8;padding:20px;border-radius:12px 12px 0 0;text-align:center">' +
+      '<h2 style="color:white;margin:0">🎟️ כרטיס כניסה למסיבת הסיום</h2></div>' +
+      '<div style="background:#f8f9ff;padding:20px;border:1px solid #d1ddf5;border-radius:0 0 12px 12px">' +
+      '<p style="font-size:16px">שלום,</p>' +
+      '<p>מצורפים כרטיסי הכניסה למסיבת הסיום של <strong>' + s.name + '</strong> מכיתה <strong>' + s.cls + '</strong>.</p>' +
+      '<p>יש להציג את הקוד בכניסה לאירוע:</p>' +
+      '<table style="width:100%;border-collapse:collapse;margin:12px 0;background:white;border-radius:8px;overflow:hidden">' +
+      ticketRows + '</table>' +
+      '<p style="color:#666;font-size:13px">נתראה במסיבה! 🎉</p>' +
+      '</div></div>';
+
+    emails.forEach(function(email) {
+      try {
+        GmailApp.sendEmail(email, subject, '', { htmlBody: body });
+        sent++;
+      } catch(e) {
+        errors++;
+      }
+    });
+  });
+
+  SpreadsheetApp.getUi().alert(
+    '✅ שליחת מיילים הושלמה!\n\n' +
+    '📧 נשלחו: ' + sent + '\n' +
+    '⚠️ ללא מייל: ' + skipped + '\n' +
+    (errors > 0 ? '❌ שגיאות: ' + errors : '')
+  );
+}
+
+// ===================================================
+// QR HELPER — הוספת QR לתא בגיליון (נוסחת IMAGE)
+// ===================================================
+function insertQRToCell(sheet, row, col, code) {
+  var url = 'https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=' + encodeURIComponent(code);
+  sheet.getRange(row, col).setFormula('=IMAGE("' + url + '")');
+  sheet.setRowHeight(row, 100);
+  sheet.setColumnWidth(col, 110);
+}
+
+// ===================================================
+// EXTRA TICKETS — פונקציות לממשק כרטיסים נוספים
+// ===================================================
+
+// מחזיר רשימת תלמידים לממשק
+function getStudentsList() {
+  // נקה cache ישן ובדוק cache חדש
+  var cache = CacheService.getScriptCache();
+  var cached = cache.get(CACHE_KEY_STUDENTS);
+  if (cached) {
+    try { return JSON.parse(cached); } catch(e) { cache.remove(CACHE_KEY_STUDENTS); }
+  }
+
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME_STUDENTS);
+  if (!sheet) return [];
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return [];
+
+  // A=ת.ז, B=שם משפחה, C=שם פרטי, D=שכבה, E=מקבילה
+  var data = sheet.getRange(2, 1, lastRow - 1, 5).getValues();
+  var students = [];
+  for (var i = 0; i < data.length; i++) {
+    var lastName  = String(data[i][1] || '').trim();
+    var firstName = String(data[i][2] || '').trim();
+    var grade     = String(data[i][3] || '').trim();
+    var classNum  = String(data[i][4] || '').trim();
+    if (!lastName && !firstName) continue;
+    students.push({
+      name: (lastName + ' ' + firstName).trim(),
+      cls:  (grade + ' ' + classNum).trim()
+    });
+  }
+
+  try { cache.put(CACHE_KEY_STUDENTS, JSON.stringify(students), 600); } catch(e) {}
+  return students;
+}
+
+// יוצר כרטיסים נוספים לתלמיד ושומר בגיליון נפרד
+function createExtraTickets(studentName, studentCls, count) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  // גיליון כרטיסים נוספים — יוצר אם לא קיים
+  var extraSheet = ss.getSheetByName(SHEET_NAME_EXTRA);
+  if (!extraSheet) {
+    extraSheet = ss.insertSheet(SHEET_NAME_EXTRA);
+    extraSheet.appendRow(['שם התלמיד', 'כיתה', 'מספר כרטיס', 'קוד כרטיס', 'סטטוס', 'זמן כניסה', 'תאריך יצירה', 'קוד QR']);
+    extraSheet.getRange(1, 1, 1, 8).setBackground('#3c78d8').setFontColor('white').setFontWeight('bold');
+  }
+
+  // מוצא את המספר הנוכחי הגבוה ביותר לתלמיד זה
+  var existingData = extraSheet.getDataRange().getValues();
+  var maxNum = 0;
+  for (var i = 1; i < existingData.length; i++) {
+    if (String(existingData[i][0]).trim() === studentName && String(existingData[i][1]).trim() === studentCls) {
+      var n = parseInt(existingData[i][2]);
+      if (!isNaN(n) && n > maxNum) maxNum = n;
+    }
+  }
+
+  // גם בגיליון הראשי
+  var mainSheet = ss.getSheetByName(SHEET_NAME_TICKETS);
+  var mainData = mainSheet.getDataRange().getValues();
+  for (var j = 1; j < mainData.length; j++) {
+    if (String(mainData[j][0]).trim() === studentName) {
+      var mn = parseInt(mainData[j][2]);
+      if (!isNaN(mn) && mn > maxNum) maxNum = mn;
+    }
+  }
+
+  var newTickets = [];
+  var extraRows = [];
+  var mainRows  = [];
+  var timestamp = new Date();
+  var studentId = studentName.replace(/\s+/g, '').substring(0, 8);
+
+  for (var k = 0; k < count; k++) {
+    maxNum++;
+    var rand = Math.floor(Math.random() * 900000 + 100000);
+    var code = 'EXTRA-' + studentId + '-' + rand + '-' + maxNum;
+    extraRows.push([studentName, studentCls, maxNum, code, 'טרם נוצל', '', timestamp, '']);
+    mainRows.push([studentName, studentCls, maxNum, code, 'טרם נוצל', '']);
+    newTickets.push({ name: studentName, cls: studentCls, num: maxNum, code: code });
+  }
+
+  // כתיבה בבלוק אחד — מהירה יותר
+  var extraStart = extraSheet.getLastRow() + 1;
+  extraSheet.getRange(extraStart, 1, extraRows.length, 8).setValues(extraRows);
+  mainSheet.getRange(mainSheet.getLastRow() + 1, 1, mainRows.length, 6).setValues(mainRows);
+
+  // הוספת QR לכל שורה
+  for (var q = 0; q < newTickets.length; q++) {
+    insertQRToCell(extraSheet, extraStart + q, 8, newTickets[q].code);
+  }
+
+  invalidateCache();
+  return newTickets;
+}
+
+// ===================================================
+// כרטיסים כלליים ללא שם תלמיד
+// ===================================================
+function createAnonymousTickets(count) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  var extraSheet = ss.getSheetByName(SHEET_NAME_EXTRA);
+  if (!extraSheet) {
+    extraSheet = ss.insertSheet(SHEET_NAME_EXTRA);
+    extraSheet.appendRow(['שם התלמיד', 'כיתה', 'מספר כרטיס', 'קוד כרטיס', 'סטטוס', 'זמן כניסה', 'תאריך יצירה', 'קוד QR']);
+    extraSheet.getRange(1, 1, 1, 8).setBackground('#3c78d8').setFontColor('white').setFontWeight('bold');
+  }
+
+  // מוצא את המספר הגבוה ביותר של כרטיסים כלליים קיימים
+  var existingData = extraSheet.getDataRange().getValues();
+  var maxNum = 0;
+  for (var i = 1; i < existingData.length; i++) {
+    if (String(existingData[i][0]).trim() === 'כללי') {
+      var n = parseInt(existingData[i][2]);
+      if (!isNaN(n) && n > maxNum) maxNum = n;
+    }
+  }
+
+  var newTickets = [];
+  var rows = [];
+  var timestamp = new Date();
+
+  for (var k = 0; k < count; k++) {
+    maxNum++;
+    var rand = Math.floor(Math.random() * 9000000 + 1000000);
+    var code = 'GEN-' + rand + '-' + maxNum;
+    rows.push(['כללי', '', maxNum, code, 'טרם נוצל', '', timestamp]);
+    newTickets.push({ name: 'כללי', cls: '', num: maxNum, code: code });
+  }
+
+  // כתיבה בבלוק אחד לגיליון נוספים
+  var lastRow = extraSheet.getLastRow();
+  extraSheet.getRange(lastRow + 1, 1, rows.length, 7).setValues(rows);
+
+  // הוספת QR לכל שורה
+  for (var q = 0; q < newTickets.length; q++) {
+    insertQRToCell(extraSheet, lastRow + 1 + q, 8, newTickets[q].code);
+  }
+
+  // גם בגיליון הראשי — כדי שהסורק יזהה
+  var mainSheet = ss.getSheetByName(SHEET_NAME_TICKETS);
+  if (mainSheet) {
+    var mainRows = rows.map(function(r) { return [r[0], r[1], r[2], r[3], r[4], r[5]]; });
+    mainSheet.getRange(mainSheet.getLastRow() + 1, 1, mainRows.length, 6).setValues(mainRows);
+  }
+
+  invalidateCache();
+  return newTickets;
+}
