@@ -16,24 +16,24 @@
     .result-card {
       display: none;
       position: fixed;
-      top: 0; left: 0; right: 0; bottom: 0;
-      z-index: 9999;
+      inset: 0;
+      z-index: 999;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      padding: 40px 24px;
-      animation: fadeIn 0.15s ease;
+      padding: 30px 20px;
+      animation: fadeIn 0.2s ease;
     }
     .result-card.show { display: flex; }
-    .success { background-color: #1a5c1e; }
+    .success { background-color: #1b5e20; }
     .warning { background-color: #b84500; }
     .error   { background-color: #7f1010; }
 
-    .result-title { font-size: 26px; font-weight: 800; margin-bottom: 20px; line-height: 1.3; }
-    .student-name { font-size: 52px; font-weight: 900; margin-bottom: 12px; letter-spacing: -1px; line-height: 1.1; }
+    .result-title { font-size: 28px; font-weight: 900; margin-bottom: 24px; line-height: 1.3; }
+    .student-name { font-size: 42px; font-weight: 900; margin-bottom: 8px; letter-spacing: -1px; }
     .details { text-align: center; background: rgba(0,0,0,0.25); padding: 16px 24px; border-radius: 12px; max-width: 340px; width: 100%; }
-    .details div { margin-bottom: 8px; font-size: 22px; font-weight: 600; }
-    .tap-hint { margin-top: 30px; font-size: 15px; opacity: 0.55; }
+    .details div { margin-bottom: 8px; font-size: 18px; }
+    .tap-hint { margin-top: 30px; font-size: 14px; opacity: 0.5; }
 
     #loading { display: none; font-size: 18px; color: #ffeb3b; margin-top: 15px; }
     #cacheStatus { font-size: 11px; color: #555; margin-top: 6px; }
@@ -47,7 +47,7 @@
   <div id="cacheStatus">⏳ טוען כרטיסים לזיכרון...</div>
   <div id="reader"></div>
   <div id="loading">⏳ בודק...</div>
-  <div id="resultCard" class="result-card">
+  <div id="resultCard" class="result-card" onclick="dismissResult()">
     <div id="resultTitle" class="result-title"></div>
     <div id="resultName" class="student-name"></div>
     <div id="resultDetails" class="details"></div>
@@ -163,20 +163,13 @@
       details.style.display = 'none';
     }
 
-    // מאפשר הקשה לסגירה רק אחרי שנייה (מונע סגירה מיידית מה-QR scan)
-    let autoClose = setTimeout(() => { dismissResult(); }, 4000);
-    setTimeout(() => {
-      document.getElementById('resultCard').onclick = function() {
-        clearTimeout(autoClose);
-        dismissResult();
-      };
-    }, 1000);
+    // סגירה אוטומטית אחרי 3 שניות
+    setTimeout(() => { dismissResult(); }, 3000);
   }
 
   function dismissResult() {
     const card = document.getElementById('resultCard');
     card.className = 'result-card';
-    card.onclick = null;
     isProcessing = false;
   }
 
