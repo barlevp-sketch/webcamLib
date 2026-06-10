@@ -39,9 +39,16 @@
 <script>
   const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyHU9LTYc6-A-qcBrBvXpRDaFF_W1k3eEgn27GBxxjoS_VcfVzawujsz2Xprvo5ZT4/exec";
 
-  let ticketCache  = {};
-  let cacheReady   = false;
-  let isProcessing = false;
+  let ticketCache   = {};
+  let cacheReady    = false;
+  let isProcessing  = false;
+  let hideTimer     = null;
+
+  function hideResult() {
+    if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+    document.getElementById('resultCard').style.display = 'none';
+    isProcessing = false;
+  }
 
   function parseGAS(text) {
     let t = text.trim();
@@ -134,24 +141,19 @@
       details.style.display = 'none';
     }
     card.style.display = 'block';
-    setTimeout(function() {
-      document.getElementById('resultCard').style.display = 'none';
-      isProcessing = false;
-    }, 4000);
+    if (hideTimer) clearTimeout(hideTimer);
+    hideTimer = setTimeout(hideResult, 4000);
   }
 
   function showError() {
-    isProcessing = false;
     document.getElementById('loading').style.display = 'none';
     const card = document.getElementById('resultCard');
     card.className = 'result-card error';
     document.getElementById('resultTitle').innerText = '❌ שגיאה: כרטיס לא נמצא או קוד שגוי.';
     document.getElementById('resultDetails').style.display = 'none';
     card.style.display = 'block';
-    setTimeout(function() {
-      document.getElementById('resultCard').style.display = 'none';
-      isProcessing = false;
-    }, 3000);
+    if (hideTimer) clearTimeout(hideTimer);
+    hideTimer = setTimeout(hideResult, 3000);
   }
 
   // ===== אתחול =====
