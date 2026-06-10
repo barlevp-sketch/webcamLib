@@ -39,25 +39,37 @@
 <script>
   const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyHU9LTYc6-A-qcBrBvXpRDaFF_W1k3eEgn27GBxxjoS_VcfVzawujsz2Xprvo5ZT4/exec";
 
-  let ticketCache = {};
-  let cacheReady  = false;
+  let ticketCache  = {};
+  let cacheReady   = false;
   let isProcessing = false;
+
+  // פרסור בטוח של תגובת גוגל (מנקה undefined עודף אם יש)
+  function parseGAS(text) {
+    let t = text.trim();
+    if (t.startsWith('undefined(')) t = t.substring(10, t.length - 2);
+    return JSON.parse(t);
+  }
+
+  function gasGet(params) {
+    return fetch(SCRIPT_URL + '?' + params, { redirect: 'follow', mode: 'cors' })
+      .then(r => r.text())
+      .then(text => parseGAS(text));
+  }
 
   // ===== טעינת כל הכרטיסים לזיכרון =====
   function loadCache() {
-    fetch(SCRIPT_URL + '?action=getTicketsWithStatus', { redirect: 'follow', mode: 'cors' })
-      .then(r => r.json())
+    gasGet('action=getTicketsWithStatus')
       .then(tickets => {
         ticketCache = {};
         tickets.forEach(t => {
-          ticketCache[t.code] = { name: t.name, cls: t.cls, num: t.num, used: t.used || false, time: t.time || null };
+          ticketCache[t.code] = { name: t.name, cls: t.cls, num: t.num, used: !!t.used, time: t.time || null };
         });
         cacheReady = true;
         const el = document.getElementById('cacheStatus');
         el.style.color = '#4caf50';
         el.textContent = '✅ ' + Object.keys(ticketCache).length + ' כרטיסים נטענו לזיכרון';
       })
-      .catch(() => {
+      .catch(err => {
         const el = document.getElementById('cacheStatus');
         el.style.color = '#f44336';
         el.textContent = '⚠️ זיכרון לא נטען — עובד ישירות מול שרת';
@@ -73,8 +85,8 @@
 
     let ticketId = decodedText.includes('id=') ? decodedText.split('id=')[1] : decodedText.trim();
 
-    if (cacheReady && ticketCache[ticketId] !== undefined) {
-      // בדיקה מקומית — מיידית, ללא loading
+    if (cacheReady && ticketCache.hasOwnProperty(ticketId)) {
+      // ===== בדיקה מקומית מיידית — ללא loading =====
       const t = ticketCache[ticketId];
       if (t.used) {
         showResult({ status: 'warning', message: '⚠️ אזהרה: כרטיס זה כבר נוצל!',
@@ -84,19 +96,22 @@
         t.time = new Date().toLocaleTimeString('he-IL');
         showResult({ status: 'success', message: '✅ הכניסה אושרה! תהנו במסיבה.',
           details: { name: t.name, class: t.cls, num: t.num } });
-        // עדכון שרת ברקע
-        fetch(SCRIPT_URL + '?action=markUsed&id=' + encodeURIComponent(ticketId), { redirect: 'follow', mode: 'cors' });
+        // עדכון שרת ברקע — לא מחכים לו
+        gasGet('action=markUsed&id=' + encodeURIComponent(ticketId)).catch(() => {});
       }
+
     } else {
-      // fallback — פנייה לשרת
+      // ===== fallback: לא במטמון — פנייה לשרת =====
       document.getElementById('loading').style.display = 'block';
-      fetch(SCRIPT_URL + '?id=' + encodeURIComponent(ticketId), { redirect: 'follow', mode: 'cors' })
-        .then(r => r.json())
+      gasGet('id=' + encodeURIComponent(ticketId))
         .then(response => {
+          // מוסיף לזיכרון לסריקה הבאה
           if (response.details) {
             ticketCache[ticketId] = {
-              name: response.details.name, cls: response.details.class,
-              num: response.details.num, used: response.status === 'success',
+              name: response.details.name,
+              cls:  response.details.class,
+              num:  response.details.num,
+              used: response.status === 'success',
               time: response.details.time || null
             };
           }
@@ -111,11 +126,11 @@
     const card    = document.getElementById('resultCard');
     const title   = document.getElementById('resultTitle');
     const details = document.getElementById('resultDetails');
-    card.className = 'result-card ' + response.status;
+    card.className  = 'result-card ' + response.status;
     title.innerText = response.message;
     if (response.details && response.status !== 'error') {
       let html = '<div><b>תלמיד/ה:</b> ' + response.details.name + '</div>' +
-                 '<div><b>כיתה:</b> ' + response.details.class + '</div>' +
+                 '<div><b>כיתה:</b> '     + response.details.class + '</div>' +
                  '<div><b>מספר כרטיס:</b> ' + response.details.num + '</div>';
       if (response.details.time)
         html += '<div style="color:#ffc107;font-weight:bold;">⏰ נסרק כבר ב: ' + response.details.time + '</div>';
