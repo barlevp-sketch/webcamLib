@@ -45,8 +45,8 @@
 </div>
 
 <script>
-  // 🔔 חבר את קישור ה-Web App החדש והמעודכן שלך כאן:
-  const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyHU9LTYc6-A-qcBrBvXpRDaFF_W1k3eEgn27GBxxjoS_VcfVzawujsz2Xprvo5ZT4/exec";
+  // 🔔 הדבק כאן את קישור ה-Web App החדש שלך (זה שמסתיים ב-/exec)
+  const GOOGLE_SCRIPT_URL = "הדבק_כאן_את_הקישור_החדש_שלך";
 
   let html5QrcodeScanner;
   let isProcessing = false;
@@ -63,10 +63,17 @@
       ticketId = decodedText.split('id=')[1];
     }
 
-    // פנייה ישירה ונקייה לשרת של גוגל
+    // פנייה לשרת וניקוי טקסטים עודפים (כמו undefined) בצורה חכמה
     fetch(`${GOOGLE_SCRIPT_URL}?id=${encodeURIComponent(ticketId)}`)
-    .then(res => res.json())
-    .then(response => {
+    .then(res => res.text())
+    .then(text => {
+      // מנקה את ה-undefined ואת הסוגריים אם גוגל מוסיפה אותם בטעות
+      let cleanText = text;
+      if (text.startsWith('undefined(')) {
+        cleanText = text.substring(10, text.length - 2);
+      }
+      
+      const response = JSON.parse(cleanText);
       showResult(response);
     })
     .catch(err => {
@@ -83,7 +90,7 @@
     card.className = "result-card " + response.status;
     title.innerText = response.message;
     
-    if (response.details) {
+    if (response.details && response.status !== "error") {
       let html = `<div><b>תלמיד/ה:</b> ${response.details.name}</div>
                   <div><b>כיתה:</b> ${response.details.class}</div>
                   <div><b>מספר כרטיס:</b> ${response.details.num}</div>`;
@@ -97,7 +104,6 @@
     }
     card.style.display = 'block';
     
-    // השהיה של 3.5 שניות בשביל ההורה הבא בתור
     setTimeout(() => { isProcessing = false; }, 3500);
   }
 
@@ -106,7 +112,7 @@
     document.getElementById('loading').style.display = 'none';
     const card = document.getElementById('resultCard');
     card.className = "result-card error";
-    document.getElementById('resultTitle').innerText = "❌ שגיאה: כרטיס לא נמצא במערכת!";
+    document.getElementById('resultTitle').innerText = "❌ שגיאה: כרטיס לא נמצא במערכת או קוד שגוי.";
     document.getElementById('resultDetails').style.display = 'none';
     card.style.display = 'block';
     setTimeout(() => { isProcessing = false; }, 3500);
