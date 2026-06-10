@@ -15,9 +15,9 @@
     .success { background-color: #1b5e20; border: 2px solid #4caf50; }
     .warning { background-color: #e65100; border: 2px solid #ff9800; }
     .error   { background-color: #b71c1c; border: 2px solid #f44336; }
-    .result-title { font-size: 24px; font-weight: bold; margin-bottom: 10px; }
+    .result-title { font-size: 30px; font-weight: bold; margin-bottom: 12px; }
     .details { text-align: right; background: rgba(0,0,0,0.2); padding: 12px; border-radius: 8px; }
-    .details div { margin-bottom: 8px; font-size: 20px; }
+    .details div { margin-bottom: 10px; font-size: 26px; }
     #loading { display: none; font-size: 18px; color: #ffeb3b; margin-top: 15px; }
     #cacheStatus { font-size: 11px; color: #555; margin-top: 6px; }
     @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
@@ -134,7 +134,10 @@
       details.style.display = 'none';
     }
     card.style.display = 'block';
-    setTimeout(() => { isProcessing = false; }, 3500);
+    setTimeout(function() {
+      card.style.display = 'none';
+      isProcessing = false;
+    }, 4000);
   }
 
   function showError() {
