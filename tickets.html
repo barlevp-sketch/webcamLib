@@ -39,10 +39,10 @@
 <script>
   const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyHU9LTYc6-A-qcBrBvXpRDaFF_W1k3eEgn27GBxxjoS_VcfVzawujsz2Xprvo5ZT4/exec";
 
-  let ticketCache   = {};
-  let cacheReady    = false;
-  let isProcessing  = false;
-  let hideTimer     = null;
+  let ticketCache  = {};
+  let cacheReady   = false;
+  let isProcessing = false;
+  let hideTimer    = null;
 
   function hideResult() {
     if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
@@ -62,7 +62,6 @@
       .then(text => parseGAS(text));
   }
 
-  // ===== טעינת כל הכרטיסים לזיכרון =====
   function loadCache() {
     gasGet('action=getTicketsWithStatus')
       .then(tickets => {
@@ -79,11 +78,9 @@
         const el = document.getElementById('cacheStatus');
         el.style.color = '#f44336';
         el.textContent = '⚠️ זיכרון לא נטען — עובד ישירות מול שרת';
-        cacheReady = false;
       });
   }
 
-  // ===== סריקה =====
   function onScanSuccess(decodedText) {
     if (isProcessing) return;
     isProcessing = true;
@@ -101,7 +98,11 @@
         t.time = new Date().toLocaleTimeString('he-IL');
         showResult({ status: 'success', message: '✅ הכניסה אושרה! תהנו במסיבה.',
           details: { name: t.name, class: t.cls, num: t.num } });
-        gasGet('action=markUsed&id=' + encodeURIComponent(ticketId)).catch(() => {});
+        // אם עדכון השרת נכשל — מחזירים מצב בזיכרון (כרטיס לא יחסם בפעם הבאה)
+        gasGet('action=markUsed&id=' + encodeURIComponent(ticketId)).catch(() => {
+          t.used = false;
+          t.time = null;
+        });
       }
     } else {
       document.getElementById('loading').style.display = 'block';
@@ -156,7 +157,6 @@
     hideTimer = setTimeout(hideResult, 3000);
   }
 
-  // ===== אתחול =====
   new Html5QrcodeScanner("reader", {
     fps: 15,
     qrbox: { width: 200, height: 200 },
