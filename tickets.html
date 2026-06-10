@@ -45,8 +45,8 @@
 </div>
 
 <script>
-  // 🔔 כאן אתה מדביק את קישור ה-Web App החדש שקיבלת (זה שמסתיים ב-/exec)
-  const GOOGLE_SCRIPT_URL = "הדבק_כאן_את_הקישור_החדש_שלך";
+  // 🔔 חבר את קישור ה-Web App החדש והמעודכן שלך כאן:
+  const GOOGLE_SCRIPT_URL = "הדבק_כאן_את_קישור_ה-EXEC_החדש_שלך";
 
   let html5QrcodeScanner;
   let isProcessing = false;
@@ -63,24 +63,15 @@
       ticketId = decodedText.split('id=')[1];
     }
 
-    // מנגנון ה-JSONP לעקיפת חסימות דפדפנים
-    const callbackName = 'jsonp_callback_' + Math.round(100000 * Math.random());
-    
-    window[callbackName] = function(response) {
+    // פנייה ישירה ונקייה לשרת של גוגל
+    fetch(`${GOOGLE_SCRIPT_URL}?id=${encodeURIComponent(ticketId)}`)
+    .then(res => res.json())
+    .then(response => {
       showResult(response);
-      document.body.removeChild(script);
-      delete window[callbackName];
-    };
-
-    const script = document.createElement('script');
-    script.src = `${GOOGLE_SCRIPT_URL}?id=${encodeURIComponent(ticketId)}&callback=${callbackName}`;
-    script.onerror = function() {
+    })
+    .catch(err => {
       showError();
-      document.body.removeChild(script);
-      delete window[callbackName];
-    };
-    
-    document.body.appendChild(script);
+    });
   }
 
   function showResult(response) {
@@ -106,7 +97,7 @@
     }
     card.style.display = 'block';
     
-    // השהיה קלה כדי לאפשר לבודק לקרוא את המסך לפני הכרטיס הבא
+    // השהיה של 3.5 שניות בשביל ההורה הבא בתור
     setTimeout(() => { isProcessing = false; }, 3500);
   }
 
@@ -115,7 +106,8 @@
     document.getElementById('loading').style.display = 'none';
     const card = document.getElementById('resultCard');
     card.className = "result-card error";
-    document.getElementById('resultTitle').innerText = "❌ שגיאה: כרטיס לא תקין או בעיית חיבור לגיליון.";
+    document.getElementById('resultTitle').innerText = "❌ שגיאה: כרטיס לא נמצא במערכת!";
+    document.getElementById('resultDetails').style.display = 'none';
     card.style.display = 'block';
     setTimeout(() => { isProcessing = false; }, 3500);
   }
