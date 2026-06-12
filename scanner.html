@@ -141,7 +141,6 @@
 
   var cv  = document.getElementById('cv');
   var ctx = cv.getContext('2d');
-  var scanTimer = null;
   var curStudent   = null;
   var scannedBooks = [];
   var lastCode     = '';
@@ -172,18 +171,14 @@
     stopScan();
     document.getElementById(statusId).textContent = '🔍 מחפש QR / ברקוד...';
 
-    // html5-qrcode — תומך ב-QR + כל סוגי ברקודים
     var scannerId = 'h5qr-' + videoId;
     var scanDiv = document.getElementById(scannerId);
     if (!scanDiv) {
       scanDiv = document.createElement('div');
       scanDiv.id = scannerId;
-      // הסתר את ה-video element המקורי, השתמש ב-div
       var vWrap = document.getElementById(videoId).parentElement;
       vWrap.appendChild(scanDiv);
     }
-
-    // הסתר video — html5-qrcode יצור משלו
     document.getElementById(videoId).style.display = 'none';
     scanDiv.style.cssText = 'width:100%;height:100%;position:absolute;top:0;left:0;';
 
@@ -192,12 +187,7 @@
 
     scanner.start(
       { facingMode: 'environment' },
-      {
-        fps: 25,
-        qrbox: undefined, // סרוק כל הפריים
-        aspectRatio: 1.0,
-        disableFlip: false
-      },
+      { fps: 25, qrbox: undefined, aspectRatio: 1.0, disableFlip: false },
       function(code) {
         if (code && code !== lastCode) {
           lastCode = code;
@@ -205,37 +195,19 @@
           onCode(code.trim());
         }
       },
-      function(err) {} // שגיאות סריקה — התעלם
+      function(err) {}
     ).catch(function(err) {
-      // fallback — אם html5-qrcode נכשל
+      // fallback
       document.getElementById(videoId).style.display = 'block';
-      scanDiv.remove();
+      if (scanDiv.parentNode) scanDiv.parentNode.removeChild(scanDiv);
       activeScanner = null;
-      startCamFallback(videoId, statusId, onCode);
-    });
-  }
-
-  // Fallback עם getUserMedia + jsQR
-  function startCamFallback(videoId, statusId, onCode) {
-    var v = document.getElementById(videoId);
-    navigator.mediaDevices.getUserMedia({
-      video: { facingMode:{ ideal:'environment' }, width:{ideal:1280}, height:{ideal:720} }
-    }).then(function(stream) {
-      v.srcObject = stream; v.play();
-      document.getElementById(statusId).textContent = '🔍 מחפש...';
-      scanTimer = setInterval(function() {
-        if (v.readyState < 2) return;
-        cv.width=v.videoWidth; cv.height=v.videoHeight; ctx.drawImage(v,0,0);
-        var img = ctx.getImageData(0,0,cv.width,cv.height);
-        var code = jsQR && (jsQR(img.data,img.width,img.height,{inversionAttempts:'dontInvert'})
-                         || jsQR(img.data,img.width,img.height,{inversionAttempts:'invertFirst'}));
-        if (code && code.data && code.data !== lastCode) {
-          lastCode = code.data; setTimeout(function(){lastCode='';},1500);
-          onCode(code.data.trim());
-        }
-      }, 80);
-    }).catch(function(err) {
-      document.getElementById('errmsg').textContent = err.message; show('serr');
+      var v = document.getElementById(videoId);
+      navigator.mediaDevices.getUserMedia({
+        video:{ facingMode:{ideal:'environment'}, width:{ideal:1280}, height:{ideal:720} }
+      }).then(function(stream){
+        v.srcObject=stream; v.play();
+        document.getElementById(statusId).textContent='🔍 מחפש...';
+      }).catch(function(e){ document.getElementById('errmsg').textContent=e.message; show('serr'); });
     });
   }
 
@@ -244,13 +216,12 @@
       try { activeScanner.stop().catch(function(){}); } catch(e){}
       activeScanner = null;
     }
-    if (scanTimer) { clearInterval(scanTimer); scanTimer = null; }
     ['v1','v2'].forEach(function(id) {
       var v = document.getElementById(id);
       if (v && v.srcObject) v.srcObject.getTracks().forEach(function(t){ t.stop(); });
-      v.style.display = 'block';
-      var scanDiv = document.getElementById('h5qr-'+id);
-      if (scanDiv) { try { scanDiv.remove(); } catch(e){} }
+      if (v) v.style.display = 'block';
+      var sd = document.getElementById('h5qr-'+id);
+      if (sd && sd.parentNode) sd.parentNode.removeChild(sd);
     });
   }
 
@@ -333,6 +304,18 @@
     var s = document.createElement('script');
     s.src = GAS_URL + '?action=getStudents&callback=_onStudentsRefreshed';
     document.head.appendChild(s);
+
+    // טען גם ספרים עדכניים מהגיליון
+    window._onBooksRefreshed = function(data) {
+      if (data && Object.keys(data).length > 0) {
+        // מיזוג עם הקיים
+        Object.keys(data).forEach(function(k){ idToBook[k] = data[k]; });
+        saveLocal(CACHE_BOOK_KEY, idToBook);
+      }
+    };
+    var sb = document.createElement('script');
+    sb.src = GAS_URL + '?action=getBooks&callback=_onBooksRefreshed';
+    document.head.appendChild(sb);
   }
 
   // ── שלב 1: תלמיד ──
