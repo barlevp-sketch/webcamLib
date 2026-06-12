@@ -4,8 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <title>סורק ספרייה</title>
-  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.1/umd/index.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
   <style>
     *{box-sizing:border-box;margin:0;padding:0;}
     body{font-family:Arial,sans-serif;background:#0f172a;color:#fff;
@@ -129,6 +128,16 @@
   var idToStudent = {};
 
   try { idToBook = JSON.parse(decodeURIComponent(params.get('ids') || '{}')); } catch(e){}
+  // שמור ספרים ב-Cache אם הגיעו מ-URL
+  if (Object.keys(idToBook).length > 0) {
+    try { localStorage.setItem('lib_books_v1', JSON.stringify({ ts: Date.now(), data: idToBook })); } catch(e) {}
+  } else {
+    // נסה לטעון מ-Cache
+    try {
+      var _cb = localStorage.getItem('lib_books_v1');
+      if (_cb) { var _cbp = JSON.parse(_cb); if (Date.now()-_cbp.ts < 21600000) idToBook = _cbp.data || {}; }
+    } catch(e) {}
+  }
 
   var cv  = document.getElementById('cv');
   var ctx = cv.getContext('2d');
@@ -156,99 +165,174 @@
     } catch(e){}
   }
 
-  // ── מנוע סריקה: jsQR ראשי + ZXing לברקודים ──
+  // ── מנוע סריקה: html5-qrcode (מהיר + ברקוד + QR) ──
+  var activeScanner = null;
+
   function startCam(videoId, statusId, onCode) {
     stopScan();
+    document.getElementById(statusId).textContent = '🔍 מחפש QR / ברקוד...';
+
+    // html5-qrcode — תומך ב-QR + כל סוגי ברקודים
+    var scannerId = 'h5qr-' + videoId;
+    var scanDiv = document.getElementById(scannerId);
+    if (!scanDiv) {
+      scanDiv = document.createElement('div');
+      scanDiv.id = scannerId;
+      // הסתר את ה-video element המקורי, השתמש ב-div
+      var vWrap = document.getElementById(videoId).parentElement;
+      vWrap.appendChild(scanDiv);
+    }
+
+    // הסתר video — html5-qrcode יצור משלו
+    document.getElementById(videoId).style.display = 'none';
+    scanDiv.style.cssText = 'width:100%;height:100%;position:absolute;top:0;left:0;';
+
+    var scanner = new Html5Qrcode(scannerId);
+    activeScanner = scanner;
+
+    scanner.start(
+      { facingMode: 'environment' },
+      {
+        fps: 25,
+        qrbox: undefined, // סרוק כל הפריים
+        aspectRatio: 1.0,
+        disableFlip: false
+      },
+      function(code) {
+        if (code && code !== lastCode) {
+          lastCode = code;
+          setTimeout(function(){ lastCode = ''; }, 1500);
+          onCode(code.trim());
+        }
+      },
+      function(err) {} // שגיאות סריקה — התעלם
+    ).catch(function(err) {
+      // fallback — אם html5-qrcode נכשל
+      document.getElementById(videoId).style.display = 'block';
+      scanDiv.remove();
+      activeScanner = null;
+      startCamFallback(videoId, statusId, onCode);
+    });
+  }
+
+  // Fallback עם getUserMedia + jsQR
+  function startCamFallback(videoId, statusId, onCode) {
     var v = document.getElementById(videoId);
-
     navigator.mediaDevices.getUserMedia({
-      video: {
-        facingMode: { ideal: 'environment' },
-        width:  { ideal: 1280 },
-        height: { ideal: 720 }
-      }
-    })
-    .then(function(stream) {
-      v.srcObject = stream;
-      v.play();
-
-      // הפעל ZXing לברקודים (אם זמין)
-      var zxingReader = null;
-      if (typeof ZXingBrowser !== 'undefined') {
-        try {
-          zxingReader = new ZXingBrowser.BrowserMultiFormatReader();
-          zxingReader.decodeFromVideoElement(v, function(result, err) {
-            if (result) {
-              var code = result.getText().trim();
-              if (code && code !== lastCode) {
-                lastCode = code;
-                setTimeout(function(){ lastCode = ''; }, 2000);
-                onCode(code);
-              }
-            }
-          });
-        } catch(e) { zxingReader = null; }
-      }
-
-      // jsQR במקביל — לQR codes
-      document.getElementById(statusId).textContent = '🔍 מחפש QR / ברקוד...';
+      video: { facingMode:{ ideal:'environment' }, width:{ideal:1280}, height:{ideal:720} }
+    }).then(function(stream) {
+      v.srcObject = stream; v.play();
+      document.getElementById(statusId).textContent = '🔍 מחפש...';
       scanTimer = setInterval(function() {
         if (v.readyState < 2) return;
-        cv.width  = v.videoWidth;
-        cv.height = v.videoHeight;
-        ctx.drawImage(v, 0, 0);
-        var img  = ctx.getImageData(0, 0, cv.width, cv.height);
-        var code = jsQR(img.data, img.width, img.height, { inversionAttempts:'dontInvert' })
-                || jsQR(img.data, img.width, img.height, { inversionAttempts:'invertFirst' })
-                || jsQR(img.data, img.width, img.height, { inversionAttempts:'attemptBoth' });
+        cv.width=v.videoWidth; cv.height=v.videoHeight; ctx.drawImage(v,0,0);
+        var img = ctx.getImageData(0,0,cv.width,cv.height);
+        var code = jsQR && (jsQR(img.data,img.width,img.height,{inversionAttempts:'dontInvert'})
+                         || jsQR(img.data,img.width,img.height,{inversionAttempts:'invertFirst'}));
         if (code && code.data && code.data !== lastCode) {
-          lastCode = code.data;
-          setTimeout(function(){ lastCode = ''; }, 2000);
+          lastCode = code.data; setTimeout(function(){lastCode='';},1500);
           onCode(code.data.trim());
         }
-      }, 100);
-
-      // שמור reader לעצירה
-      v._zxingReader = zxingReader;
-    })
-    .catch(function(err) {
-      document.getElementById('errmsg').textContent = err.message;
-      show('serr');
+      }, 80);
+    }).catch(function(err) {
+      document.getElementById('errmsg').textContent = err.message; show('serr');
     });
   }
 
   function stopScan() {
+    if (activeScanner) {
+      try { activeScanner.stop().catch(function(){}); } catch(e){}
+      activeScanner = null;
+    }
     if (scanTimer) { clearInterval(scanTimer); scanTimer = null; }
     ['v1','v2'].forEach(function(id) {
       var v = document.getElementById(id);
-      if (v && v.srcObject) { v.srcObject.getTracks().forEach(function(t){ t.stop(); }); }
-      if (v && v._zxingReader) { try { v._zxingReader.reset(); } catch(e){} v._zxingReader = null; }
+      if (v && v.srcObject) v.srcObject.getTracks().forEach(function(t){ t.stop(); });
+      v.style.display = 'block';
+      var scanDiv = document.getElementById('h5qr-'+id);
+      if (scanDiv) { try { scanDiv.remove(); } catch(e){} }
     });
   }
 
-  // ── טעינת תלמידים (JSONP) ──
+  // ── מפתחות Cache מקומי ──
+  var CACHE_STU_KEY  = 'lib_students_v1';
+  var CACHE_BOOK_KEY = 'lib_books_v1';
+  var CACHE_GAS_KEY  = 'lib_gas_url';
+  var CACHE_TTL      = 6 * 60 * 60 * 1000; // 6 שעות
+
+  function saveLocal(key, data) {
+    try { localStorage.setItem(key, JSON.stringify({ ts: Date.now(), data: data })); } catch(e){}
+  }
+  function loadLocal(key) {
+    try {
+      var raw = localStorage.getItem(key);
+      if (!raw) return null;
+      var obj = JSON.parse(raw);
+      if (Date.now() - obj.ts > CACHE_TTL) { localStorage.removeItem(key); return null; }
+      return obj.data;
+    } catch(e) { return null; }
+  }
+
+  // ── טעינת תלמידים (Cache + JSONP) ──
   function init() {
+    // נסה לטעון מ-Cache מקומי קודם
+    var cachedStu  = loadLocal(CACHE_STU_KEY);
+    var cachedBook = loadLocal(CACHE_BOOK_KEY);
+    var cachedGas  = loadLocal(CACHE_GAS_KEY);
+
+    if (cachedStu && Object.keys(cachedStu).length > 0) {
+      idToStudent = cachedStu;
+      if (cachedBook && Object.keys(cachedBook).length > 0) idToBook = cachedBook;
+      if (cachedGas) GAS_URL = cachedGas;
+      var cnt = Object.keys(idToStudent).length;
+      document.getElementById('st1').textContent = '⚡ Cache: ' + cnt + ' תלמידים | ' + Object.keys(idToBook).length + ' ספרים';
+      setTimeout(startStudentScan, 200);
+      // עדכן ברקע אם יש GAS_URL
+      if (GAS_URL) refreshStudentsInBackground();
+      return;
+    }
+
     if (GAS_URL) {
       document.getElementById('st1').textContent = '⏳ טוען תלמידים...';
+      saveLocal(CACHE_GAS_KEY, GAS_URL);
       window._onStudentsLoaded = function(data) {
         idToStudent = data || {};
+        saveLocal(CACHE_STU_KEY, idToStudent);
+        // שמור גם ספרים ב-cache
+        if (Object.keys(idToBook).length > 0) saveLocal(CACHE_BOOK_KEY, idToBook);
         var cnt = Object.keys(idToStudent).length;
         document.getElementById('st1').textContent = '✅ ' + cnt + ' תלמידים | ' + Object.keys(idToBook).length + ' ספרים';
-        setTimeout(startStudentScan, 400);
+        setTimeout(startStudentScan, 300);
       };
       var s = document.createElement('script');
       s.src = GAS_URL + '?action=getStudents&callback=_onStudentsLoaded';
       s.onerror = function() {
-        document.getElementById('st1').textContent = '⚠️ שגיאת טעינה';
-        startStudentScan();
+        document.getElementById('st1').textContent = '⚠️ שגיאת טעינה — מתחיל ללא תלמידים';
+        setTimeout(startStudentScan, 500);
       };
       document.head.appendChild(s);
       setTimeout(function() {
-        if (!Object.keys(idToStudent).length) startStudentScan();
+        if (!Object.keys(idToStudent).length) {
+          document.getElementById('st1').textContent = '⚠️ Timeout — מתחיל ללא תלמידים';
+          startStudentScan();
+        }
       }, 6000);
     } else {
       startStudentScan();
     }
+  }
+
+  function refreshStudentsInBackground() {
+    if (!GAS_URL) return;
+    window._onStudentsRefreshed = function(data) {
+      if (data && Object.keys(data).length > 0) {
+        idToStudent = data;
+        saveLocal(CACHE_STU_KEY, data);
+      }
+    };
+    var s = document.createElement('script');
+    s.src = GAS_URL + '?action=getStudents&callback=_onStudentsRefreshed';
+    document.head.appendChild(s);
   }
 
   // ── שלב 1: תלמיד ──
