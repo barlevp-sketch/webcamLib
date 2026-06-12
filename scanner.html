@@ -182,7 +182,8 @@
           .then(function(devices) {
             var back = devices.find(function(d){ return /back|rear|environment/i.test(d.label); });
             var devId = back ? back.deviceId : (devices.length ? devices[0].deviceId : undefined);
-            document.getElementById(statusId).textContent = '🔍 מחפש QR / ברקוד...';
+            var libName = typeof ZXingBrowser !== 'undefined' ? 'ZXing' : 'jsQR';
+            document.getElementById(statusId).textContent = '🔍 מחפש QR / ברקוד (' + libName + ')...';
             reader.decodeFromVideoDevice(devId, videoId, function(result, err) {
               if (!result) return;
               var code = result.getText().trim();
