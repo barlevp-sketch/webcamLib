@@ -50,6 +50,30 @@
     isProcessing = false;
   }
 
+  // ===== צפצופים =====
+  function beep(times) {
+    try {
+      var ctx = new (window.AudioContext || window.webkitAudioContext)();
+      var delay = 0;
+      for (var i = 0; i < times; i++) {
+        (function(d) {
+          setTimeout(function() {
+            var osc = ctx.createOscillator();
+            var gain = ctx.createGain();
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.frequency.value = times === 1 ? 880 : 440;
+            gain.gain.setValueAtTime(0.3, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
+            osc.start(ctx.currentTime);
+            osc.stop(ctx.currentTime + 0.2);
+          }, d);
+        })(delay);
+        delay += 300;
+      }
+    } catch(e) {}
+  }
+
   function parseGAS(text) {
     let t = text.trim();
     if (t.startsWith('undefined(')) t = t.substring(10, t.length - 2);
@@ -116,6 +140,7 @@
     // כרטיס ידוע כנוצל — חסום מיד
     if (cacheReady && ticketCache.hasOwnProperty(ticketId) && ticketCache[ticketId].used) {
       const t = ticketCache[ticketId];
+      beep(2);
       showResult({
         status: 'warning',
         message: '⚠️ אזהרה: כרטיס זה כבר נוצל!',
@@ -129,6 +154,7 @@
       const t = ticketCache[ticketId];
       t.used = true;
       t.time = new Date().toLocaleTimeString('he-IL');
+      beep(1);
       showResult({
         status: 'success',
         message: '✅ הכניסה אושרה! תהנו במסיבה.',
@@ -184,6 +210,7 @@
   }
 
   function showError() {
+    beep(2);
     document.getElementById('loading').style.display = 'none';
     const card = document.getElementById('resultCard');
     card.className = 'result-card error';
