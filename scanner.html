@@ -363,11 +363,25 @@
     var l = document.getElementById('blist'); l.innerHTML='';
     sorted.forEach(function(b,i){
       var t=document.createElement('div'); t.className='btag';
-      t.innerHTML='<span class="bnum">'+(i+1)+'</span>'+b.name;
+      t.style.justifyContent='space-between';
+      t.innerHTML='<span class="bnum">'+(i+1)+'</span>'
+        +'<span style="flex:1;margin:0 6px;">'+b.name+'</span>'
+        +'<button onclick="removeBook(''+b.id+'')" '
+        +'style="background:rgba(224,49,49,0.3);border:1px solid #e03131;color:#ff8787;'
+        +'border-radius:6px;padding:2px 8px;font-size:11px;font-weight:700;cursor:pointer;'
+        +'flex-shrink:0;">✕</button>';
       l.appendChild(t);
     });
     var counter = document.getElementById('book-counter');
     if (counter) counter.textContent = scannedBooks.length ? scannedBooks.length+' ספרים נסרקו' : '';
+  }
+
+  function removeBook(id) {
+    scannedBooks = scannedBooks.filter(function(b){ return b.id !== id; });
+    renderBooks();
+    if (scannedBooks.length === 0) {
+      document.getElementById('st3').textContent = '🔍 מחפש QR / ברקוד...';
+    }
   }
 
   // ── שלב 3: סיום ──
