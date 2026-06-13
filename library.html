@@ -99,32 +99,41 @@
 
     var scanner = new Html5Qrcode(scannerId);
     activeScanner = scanner;
+    
+    var config = { fps: 25, qrbox: undefined, aspectRatio: 1.0, disableFlip: false };
+    
+    var onSuccess = function(code) {
+      if (code && code !== lastCode) {
+        lastCode = code;
+        handleScannedCode(code.trim());
+      }
+    };
 
-    scanner.start(
-      { facingMode: 'environment' },
-      { fps: 25, qrbox: undefined, aspectRatio: 1.0, disableFlip: false },
-      function(code) {
-        if (code && code !== lastCode) {
-          lastCode = code;
-          handleScannedCode(code.trim());
-        }
-      },
-      function(err) {}
-    ).catch(function(err) {
-      // Fallback למצלמה רגילה במקרה של תקלה באתחול הסורק המתקדם
+    var showError = function(msg) {
       document.getElementById('v1').style.display = 'block';
       if (scanDiv.parentNode) scanDiv.parentNode.removeChild(scanDiv);
       activeScanner = null;
-      
-      navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
-      }).then(function(stream){
-        document.getElementById('v1').srcObject = stream;
-        document.getElementById('st1').textContent = '🔍 מחפש ברקוד...';
-      }).catch(function(e){ 
-        document.getElementById('errmsg').textContent = e.message; 
-        document.getElementById('s1').className = 'screen';
-        document.getElementById('serr').className = 'screen on';
+      document.getElementById('errmsg').innerHTML = msg; 
+      document.getElementById('s1').className = 'screen';
+      document.getElementById('serr').className = 'screen on';
+    };
+
+    // נסיון 1: הפעלת מצלמה אחורית (מותאם לטלפונים/טאבלטים)
+    scanner.start({ facingMode: 'environment' }, config, onSuccess, function(err) {})
+    .catch(function(err) {
+      // נסיון 2: אם אין מצלמה אחורית (כמו במחשב נייד/נייח), נחפש כל מצלמה זמינה
+      Html5Qrcode.getCameras().then(function(devices) {
+        if (devices && devices.length > 0) {
+          // נשתמש במצלמה הראשונה שזמינה
+          scanner.start(devices[0].id, config, onSuccess, function(err) {})
+          .catch(function(e) {
+             showError(e.message || "שגיאה בהפעלת המצלמה החלופית");
+          });
+        } else {
+           showError("לא נמצאה מצלמה מחוברת למכשיר");
+        }
+      }).catch(function(e) {
+         showError("אין הרשאה, או שהמצלמה נפתחה בחלונית גוגל שחוסמת אותה.<br><br><b>חובה לפתוח קישור זה בטאב חדש בדפדפן!</b>");
       });
     });
   }
