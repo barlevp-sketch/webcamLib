@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>סורק ספרייה מהיר</title>
+  <title>סורק ספרייה מהיר + צילום</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -49,7 +49,7 @@
 
 <div id="s1" class="screen on">
   <h2>📷 סרוק קוד ברקוד / QR</h2>
-  <div class="sub">כוון את מצלמת המכשיר ישירות לקוד</div>
+  <div class="sub">כוון את מצלמת המכשיר ישירות לקוד<br>(תמונה תילקח אוטומטית בעת הזיהוי)</div>
   <div class="vwrap">
     <video id="v1" autoplay muted playsinline></video>
     <div class="laser"></div>
@@ -140,19 +140,43 @@
     }
   }
 
+  // פונקציה חדשה: לוכדת תמונה מתוך המצלמה באותו הרגע
+  function takeSnapshot() {
+    try {
+      var videoElement = document.querySelector('video');
+      if (!videoElement || !videoElement.videoWidth) return null;
+      
+      var canvas = document.createElement('canvas');
+      canvas.width = videoElement.videoWidth;
+      canvas.height = videoElement.videoHeight;
+      var ctx = canvas.getContext('2d');
+      ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+      
+      // החזרת התמונה בפורמט Base64 קל
+      return canvas.toDataURL('image/jpeg', 0.8);
+    } catch(e) {
+      console.error("שגיאה בצילום התמונה:", e);
+      return null;
+    }
+  }
+
   function handleScannedCode(code) {
     beep();
+    
+    // מצלם את התמונה שניה לפני שסוגר את המצלמה!
+    var capturedImage = takeSnapshot();
+    
     stopScan();
 
-    // שליחת התוצאה חזרה לממשק הראשי (אדמין / ספרנית / מחולל קודים)
+    // שליחת התוצאה חזרה לממשק הראשי (כולל התמונה)
     try {
       if (window.opener && !window.opener.closed) {
-        // שולח את כל האפשרויות שהממשקים השונים שלכם מצפים לקבל
         window.opener.postMessage({ 
           type: 'QR_SCANNED', 
           book: code, 
           code: code, 
-          sid: SESSION 
+          sid: SESSION,
+          image: capturedImage // <==== התמונה החדשה מצורפת כאן
         }, '*');
       }
     } catch(e){
@@ -169,7 +193,7 @@
     setTimeout(function(){ window.close(); }, 1200);
   }
 
-  // הפעלה מיידית של הסורק עם עמידת הדף ברשת
+  // הפעלה מיידית של הסורק עם טעינת הדף
   window.addEventListener('load', startCam);
 </script>
 </body>
