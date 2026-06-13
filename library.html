@@ -63,7 +63,7 @@
 <div id="serr" class="screen">
   <div style="font-size:48px">📵</div>
   <div style="font-size:17px;font-weight:800;color:#e03131;">לא ניתן לגשת למצלמה</div>
-  <div style="font-size:13px;color:rgba(255,255,255,0.5);" id="errmsg"></div>
+  <div style="font-size:13px;color:rgba(255,255,255,0.8);line-height:1.5;" id="errmsg"></div>
   <button class="btn btn-blue" onclick="location.reload()">🔄 נסה שוב</button>
 </div>
 
@@ -100,31 +100,46 @@
     var scanner = new Html5Qrcode(scannerId);
     activeScanner = scanner;
 
-    scanner.start(
-      { facingMode: 'environment' },
-      { fps: 25, qrbox: undefined, aspectRatio: 1.0, disableFlip: false },
-      function(code) {
-        if (code && code !== lastCode) {
-          lastCode = code;
-          handleScannedCode(code.trim());
-        }
-      },
-      function(err) {}
-    ).catch(function(err) {
-      // Fallback למצלמה רגילה במקרה של תקלה באתחול הסורק המתקדם
+    var config = { fps: 25, qrbox: undefined, aspectRatio: 1.0, disableFlip: false };
+
+    var onSuccess = function(code) {
+      if (code && code !== lastCode) {
+        lastCode = code;
+        handleScannedCode(code.trim());
+      }
+    };
+
+    var showError = function(e) {
       document.getElementById('v1').style.display = 'block';
       if (scanDiv.parentNode) scanDiv.parentNode.removeChild(scanDiv);
       activeScanner = null;
       
-      navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
-      }).then(function(stream){
-        document.getElementById('v1').srcObject = stream;
-        document.getElementById('st1').textContent = '🔍 מחפש ברקוד...';
-      }).catch(function(e){ 
-        document.getElementById('errmsg').textContent = e.message; 
-        document.getElementById('s1').className = 'screen';
-        document.getElementById('serr').className = 'screen on';
+      var errorText = e.message || String(e);
+      if (errorText.indexOf("Permissions policy violation") !== -1 || (window.self !== window.top)) {
+          document.getElementById('errmsg').innerHTML = "המצלמה נחסמה (Permissions policy violation).<br><br><span style='color:#ff8787'>גוגל והדפדפן חוסמים מצלמה בתוך חלונות קופצים.</span><br><br><b>חובה לאפשר Pop-ups (חלונות קופצים) בשורת הכתובת, ולוודא שהסורק נפתח בלשונית חדשה!</b>";
+      } else {
+          document.getElementById('errmsg').textContent = errorText; 
+      }
+      
+      document.getElementById('s1').className = 'screen';
+      document.getElementById('serr').className = 'screen on';
+    };
+
+    // מנסה תחילה מצלמה אחורית (לטלפונים)
+    scanner.start({ facingMode: 'environment' }, config, onSuccess, function(err) {})
+    .catch(function(err) {
+      // אם אין מצלמה אחורית (מחשבים ניידים), מחפש כל מצלמה זמינה כדי שלא יקרוס
+      Html5Qrcode.getCameras().then(function(devices) {
+        if (devices && devices.length > 0) {
+          scanner.start(devices[0].id, config, onSuccess, function(err) {})
+          .catch(function(e) {
+             showError(e);
+          });
+        } else {
+           showError(new Error("לא נמצאה שום מצלמה מחוברת."));
+        }
+      }).catch(function(e) {
+         showError(e);
       });
     });
   }
