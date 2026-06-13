@@ -118,23 +118,38 @@
       document.getElementById('serr').className = 'screen on';
     };
 
-    // נסיון 1: הפעלת מצלמה אחורית (מותאם לטלפונים/טאבלטים)
-    scanner.start({ facingMode: 'environment' }, config, onSuccess, function(err) {})
-    .catch(function(err) {
-      // נסיון 2: אם אין מצלמה אחורית (כמו במחשב נייד/נייח), נחפש כל מצלמה זמינה
-      Html5Qrcode.getCameras().then(function(devices) {
-        if (devices && devices.length > 0) {
-          // נשתמש במצלמה הראשונה שזמינה
-          scanner.start(devices[0].id, config, onSuccess, function(err) {})
-          .catch(function(e) {
-             showError(e.message || "שגיאה בהפעלת המצלמה החלופית");
-          });
-        } else {
-           showError("לא נמצאה מצלמה מחוברת למכשיר");
+    // 1. בדיקה קריטית: האם אנחנו רצים בתוך iframe של גוגל שיטס שחוסם את המצלמה?
+    var isIframe = false;
+    try { isIframe = window.self !== window.top; } catch(e) { isIframe = true; }
+
+    if (isIframe) {
+        showError("המצלמה חסומה בגלל הגדרות האבטחה של גוגל!<br><br><b>אסור לפתוח את הסורק בתוך חלונית קופצת בגיליון. יש להקפיד שהקישור נפתח בטאב חדש (חלון עצמאי) בדפדפן.</b>");
+        return;
+    }
+
+    // 2. חיפוש כל המצלמות במכשיר והפעלה חכמה (למניעת קריסה במחשבים ללא מצלמה אחורית)
+    Html5Qrcode.getCameras().then(function(devices) {
+      if (devices && devices.length > 0) {
+        var cameraId = devices[0].id; // נבחר את המצלמה הראשונה שקיימת כברירת מחדל (למשל מצלמת רשת בנייד)
+        
+        // ננסה לשדרג למצלמה אחורית אם המכשיר תומך בכך (טלפון/טאבלט)
+        for (var i = 0; i < devices.length; i++) {
+          if (devices[i].label.toLowerCase().indexOf("back") !== -1 ||
+              devices[i].label.toLowerCase().indexOf("environment") !== -1) {
+            cameraId = devices[i].id;
+            break;
+          }
         }
-      }).catch(function(e) {
-         showError("אין הרשאה, או שהמצלמה נפתחה בחלונית גוגל שחוסמת אותה.<br><br><b>חובה לפתוח קישור זה בטאב חדש בדפדפן!</b>");
-      });
+
+        scanner.start(cameraId, config, onSuccess, function(err) {})
+        .catch(function(e) {
+           showError("שגיאה בהפעלת המצלמה: " + (e.message || e));
+        });
+      } else {
+         showError("לא נמצאה שום מצלמה מחוברת למכשיר.");
+      }
+    }).catch(function(err) {
+       showError("אין הרשאה למצלמה. אנא ודא שאפשרת גישה למצלמה בדפדפן שלך.<br><small>(" + err + ")</small>");
     });
   }
 
