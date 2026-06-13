@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>סורק ספרייה מהיר + צילום</title>
+  <title>סורק ספרייה מהיר</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -49,7 +49,7 @@
 
 <div id="s1" class="screen on">
   <h2>📷 סרוק קוד ברקוד / QR</h2>
-  <div class="sub">כוון את מצלמת המכשיר ישירות לקוד<br>(תמונה תילקח אוטומטית בעת הזיהוי)</div>
+  <div class="sub">כוון את מצלמת המכשיר ישירות לקוד</div>
   <div class="vwrap">
     <video id="v1" autoplay muted playsinline></video>
     <div class="laser"></div>
@@ -99,57 +99,33 @@
 
     var scanner = new Html5Qrcode(scannerId);
     activeScanner = scanner;
-    
-    var config = { fps: 25, qrbox: undefined, aspectRatio: 1.0, disableFlip: false };
-    
-    var onSuccess = function(code) {
-      if (code && code !== lastCode) {
-        lastCode = code;
-        handleScannedCode(code.trim());
-      }
-    };
 
-    var showError = function(msg) {
+    scanner.start(
+      { facingMode: 'environment' },
+      { fps: 25, qrbox: undefined, aspectRatio: 1.0, disableFlip: false },
+      function(code) {
+        if (code && code !== lastCode) {
+          lastCode = code;
+          handleScannedCode(code.trim());
+        }
+      },
+      function(err) {}
+    ).catch(function(err) {
+      // Fallback למצלמה רגילה במקרה של תקלה באתחול הסורק המתקדם
       document.getElementById('v1').style.display = 'block';
       if (scanDiv.parentNode) scanDiv.parentNode.removeChild(scanDiv);
       activeScanner = null;
-      document.getElementById('errmsg').innerHTML = msg; 
-      document.getElementById('s1').className = 'screen';
-      document.getElementById('serr').className = 'screen on';
-    };
-
-    // 1. בדיקה קריטית: האם אנחנו רצים בתוך iframe של גוגל שיטס שחוסם את המצלמה?
-    var isIframe = false;
-    try { isIframe = window.self !== window.top; } catch(e) { isIframe = true; }
-
-    if (isIframe) {
-        showError("המצלמה חסומה בגלל הגדרות האבטחה של גוגל!<br><br><b>אסור לפתוח את הסורק בתוך חלונית קופצת בגיליון. יש להקפיד שהקישור נפתח בטאב חדש (חלון עצמאי) בדפדפן.</b>");
-        return;
-    }
-
-    // 2. חיפוש כל המצלמות במכשיר והפעלה חכמה (למניעת קריסה במחשבים ללא מצלמה אחורית)
-    Html5Qrcode.getCameras().then(function(devices) {
-      if (devices && devices.length > 0) {
-        var cameraId = devices[0].id; // נבחר את המצלמה הראשונה שקיימת כברירת מחדל (למשל מצלמת רשת בנייד)
-        
-        // ננסה לשדרג למצלמה אחורית אם המכשיר תומך בכך (טלפון/טאבלט)
-        for (var i = 0; i < devices.length; i++) {
-          if (devices[i].label.toLowerCase().indexOf("back") !== -1 ||
-              devices[i].label.toLowerCase().indexOf("environment") !== -1) {
-            cameraId = devices[i].id;
-            break;
-          }
-        }
-
-        scanner.start(cameraId, config, onSuccess, function(err) {})
-        .catch(function(e) {
-           showError("שגיאה בהפעלת המצלמה: " + (e.message || e));
-        });
-      } else {
-         showError("לא נמצאה שום מצלמה מחוברת למכשיר.");
-      }
-    }).catch(function(err) {
-       showError("אין הרשאה למצלמה. אנא ודא שאפשרת גישה למצלמה בדפדפן שלך.<br><small>(" + err + ")</small>");
+      
+      navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
+      }).then(function(stream){
+        document.getElementById('v1').srcObject = stream;
+        document.getElementById('st1').textContent = '🔍 מחפש ברקוד...';
+      }).catch(function(e){ 
+        document.getElementById('errmsg').textContent = e.message; 
+        document.getElementById('s1').className = 'screen';
+        document.getElementById('serr').className = 'screen on';
+      });
     });
   }
 
@@ -164,43 +140,19 @@
     }
   }
 
-  // פונקציה חדשה: לוכדת תמונה מתוך המצלמה באותו הרגע
-  function takeSnapshot() {
-    try {
-      var videoElement = document.querySelector('video');
-      if (!videoElement || !videoElement.videoWidth) return null;
-      
-      var canvas = document.createElement('canvas');
-      canvas.width = videoElement.videoWidth;
-      canvas.height = videoElement.videoHeight;
-      var ctx = canvas.getContext('2d');
-      ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
-      
-      // החזרת התמונה בפורמט Base64 קל
-      return canvas.toDataURL('image/jpeg', 0.8);
-    } catch(e) {
-      console.error("שגיאה בצילום התמונה:", e);
-      return null;
-    }
-  }
-
   function handleScannedCode(code) {
     beep();
-    
-    // מצלם את התמונה שניה לפני שסוגר את המצלמה!
-    var capturedImage = takeSnapshot();
-    
     stopScan();
 
-    // שליחת התוצאה חזרה לממשק הראשי (כולל התמונה)
+    // שליחת התוצאה חזרה לממשק הראשי (אדמין / ספרנית / מחולל קודים)
     try {
       if (window.opener && !window.opener.closed) {
+        // שולח את כל האפשרויות שהממשקים השונים שלכם מצפים לקבל
         window.opener.postMessage({ 
           type: 'QR_SCANNED', 
           book: code, 
           code: code, 
-          sid: SESSION,
-          image: capturedImage // <==== התמונה החדשה מצורפת כאן
+          sid: SESSION 
         }, '*');
       }
     } catch(e){
@@ -217,7 +169,7 @@
     setTimeout(function(){ window.close(); }, 1200);
   }
 
-  // הפעלה מיידית של הסורק עם טעינת הדף
+  // הפעלה מיידית של הסורק עם עמידת הדף ברשת
   window.addEventListener('load', startCam);
 </script>
 </body>
