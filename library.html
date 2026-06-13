@@ -144,10 +144,9 @@
     beep();
     stopScan();
 
-    // שליחת התוצאה חזרה לממשק הראשי (אדמין / ספרנית / מחולל קודים)
+    // שליחת התוצאה חזרה לממשק הראשי
     try {
       if (window.opener && !window.opener.closed) {
-        // שולח את כל האפשרויות שהממשקים השונים שלכם מצפים לקבל
         window.opener.postMessage({ 
           type: 'QR_SCANNED', 
           book: code, 
